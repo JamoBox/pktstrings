@@ -1,0 +1,14 @@
+[package]
+name = "pktstrings"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = {version = "3", features = ["derive"]}
+pcap = "0"
+colored = "2"
+dns-lookup = {version = "1", optional = true}
+
+[features]
+bland = ["colored/no-color"]
+resolve = ["dns-lookup"]
