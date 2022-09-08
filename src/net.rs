@@ -1,7 +1,7 @@
-use std::fmt;
-use std::fmt::Write;
 use colored::*;
 use pcap::Packet;
+use std::fmt;
+use std::fmt::Write;
 use std::result::Result;
 
 #[cfg(feature = "resolve")]
@@ -23,10 +23,7 @@ fn getaddr(data: &[u8], offset: usize, size: usize) -> Result<u128, &str> {
     }
     let mut addr: u128 = 0;
     for i in 0..(size / 8) {
-        addr |= {
-            (data[offset + i] as u128)
-            << ((size - 8) - (8 * i))
-        }
+        addr |= (data[offset + i] as u128) << ((size - 8) - (8 * i)) 
     }
     Ok(addr)
 }
@@ -60,26 +57,15 @@ fn int_to_ipv4_str(addr: &u32, formatted: &mut String) {
     }
 }
 
-fn handle_eth(
-    pkt: &Packet,
-    offset: usize,
-    pktsum: &mut PacketSummary,
-) -> Result<usize, String> {
+fn handle_eth(pkt: &Packet, offset: usize, pktsum: &mut PacketSummary) -> Result<usize, String> {
     pktsum.l2_dst = getaddr(pkt, offset, 48)?;
     pktsum.l2_src = getaddr(pkt, offset + 6, 48)?;
-    pktsum.ethertype = {
-        ((pkt.data[12] as u16) << 8) |
-        (pkt.data[13] as u16)
-    };
+    pktsum.ethertype = ((pkt.data[12] as u16) << 8) | (pkt.data[13] as u16) ;
 
     Ok(14)
 }
 
-fn handle_ipv4(
-    pkt: &Packet,
-    offset: usize,
-    pktsum: &mut PacketSummary,
-) -> Result<usize, String> {
+fn handle_ipv4(pkt: &Packet, offset: usize, pktsum: &mut PacketSummary) -> Result<usize, String> {
     let ihl: u8 = (pkt.data[offset] & 0xf) * 4;
 
     let next_offset: usize = offset + ihl as usize;
@@ -91,11 +77,7 @@ fn handle_ipv4(
     Ok(next_offset)
 }
 
-fn handle_ipv6(
-    pkt: &Packet,
-    offset: usize,
-    pktsum: &mut PacketSummary,
-) -> Result<usize, String> {
+fn handle_ipv6(pkt: &Packet, offset: usize, pktsum: &mut PacketSummary) -> Result<usize, String> {
     pktsum.next_proto = pkt.data[offset + 6];
     pktsum.l3_src = getaddr(pkt, offset + 8, 128)?;
     pktsum.l3_dst = getaddr(pkt, offset + 24, 128)?;
@@ -147,7 +129,7 @@ impl PacketSummary {
 
         let l3_offset = match handle_eth(pkt, 0, &mut pktsum) {
             Ok(o) => o,
-            Err(_) => return pktsum,  // cannot continue
+            Err(_) => return pktsum, // cannot continue
         };
         let l3_callback = match pktsum.ethertype {
             IPV4 => handle_ipv4,
@@ -156,15 +138,15 @@ impl PacketSummary {
         };
         let l4_offset = match l3_callback(pkt, l3_offset, &mut pktsum) {
             Ok(o) => o,
-            Err(_) => return pktsum,  // cannot continue
+            Err(_) => return pktsum, // cannot continue
         };
 
         match pktsum.next_proto {
             TCP | UDP => {
-                pktsum.l4_sport = ((pkt.data[l4_offset] as u16) << 8)
-                    | pkt.data[l4_offset + 1] as u16;
-                pktsum.l4_dport = ((pkt.data[l4_offset + 2] as u16) << 8)
-                    | pkt.data[l4_offset + 3] as u16;
+                pktsum.l4_sport =
+                    ((pkt.data[l4_offset] as u16) << 8) | pkt.data[l4_offset + 1] as u16;
+                pktsum.l4_dport =
+                    ((pkt.data[l4_offset + 2] as u16) << 8) | pkt.data[l4_offset + 3] as u16;
             }
             _ => {}
         }
@@ -191,17 +173,16 @@ impl fmt::Display for PacketSummary {
                 int_to_ipv6_str(&self.l3_src, &mut l3_src);
                 int_to_ipv6_str(&self.l3_dst, &mut l3_dst);
                 true
-            },
+            }
             IPV4 => {
                 int_to_ipv4_str(&(self.l3_src as u32), &mut l3_src);
                 int_to_ipv4_str(&(self.l3_dst as u32), &mut l3_dst);
                 true
-            },
+            }
             _ => false,
         };
 
         if is_ip {
-
             #[cfg(feature = "resolve")]
             if self.resolve {
                 let srcip: IpAddr = l3_src.parse().unwrap();
@@ -209,12 +190,12 @@ impl fmt::Display for PacketSummary {
 
                 match lookup_addr(&srcip) {
                     Ok(r) => l3_src = r,
-                    Err(_) => {},
+                    Err(_) => {}
                 }
 
                 match lookup_addr(&dstip) {
                     Ok(r) => l3_src = r,
-                    Err(_) => {},
+                    Err(_) => {}
                 }
             }
 

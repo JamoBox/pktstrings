@@ -1,12 +1,7 @@
-use std::path::Path;
+use clap::{CommandFactory, Error, ErrorKind, Parser};
 use colored::*;
-use clap::{
-    CommandFactory,
-    Parser,
-    Error,
-    ErrorKind,
-};
 use pcap::Capture;
+use std::path::Path;
 
 mod net;
 
@@ -30,7 +25,7 @@ struct Cli {
     resolve_dns: bool,
 }
 
-fn main() -> Result<(), Error>{
+fn main() -> Result<(), Error> {
     let cli = Cli::parse();
     let mut cmd = Cli::command();
 
@@ -40,17 +35,13 @@ fn main() -> Result<(), Error>{
         cmd.error(
             ErrorKind::InvalidValue,
             format!("file not found: {}", cli.file),
-        ).exit();
+        )
+        .exit();
     }
 
     let mut cap = match Capture::from_file(file) {
         Ok(cap) => cap,
-        Err(err) => {
-            return Err(cmd.error(
-                ErrorKind::InvalidValue,
-                err,
-            ))
-        },
+        Err(err) => return Err(cmd.error(ErrorKind::InvalidValue, err)),
     };
 
     let mut pkt_count = 0;
@@ -70,10 +61,7 @@ fn main() -> Result<(), Error>{
                 } else {
                     partial.push(c);
                     if chars == cli.number {
-                        let pktsum = net::PacketSummary::from_packet(
-                            &pkt,
-                            resolve,
-                        );
+                        let pktsum = net::PacketSummary::from_packet(&pkt, resolve);
                         let idx = pkt_count.to_string().blue();
                         if !printed {
                             println!("[{idx}]{pktsum}:");
