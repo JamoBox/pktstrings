@@ -6,6 +6,8 @@ Pktstrings is like Unix `strings` command, but packet-aware.
 
 It finds anything looking like an ASCII string in your PCAP and dumps the packet number plus IP 5-tuple (or MACs + Ethertype if not IP) of where the strings were found.
 
+![image](https://user-images.githubusercontent.com/2273100/189227785-6dc1e938-693d-4751-9a33-10de4e69c3d1.png)
+
 ## Install
 To build full release:
 `cargo build --release`
