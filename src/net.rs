@@ -1,4 +1,5 @@
 use std::fmt;
+use std::fmt::Write;
 use colored::*;
 use pcap::Packet;
 use std::result::Result;
@@ -16,7 +17,7 @@ const IPV4: u16 = 0x0800;
 const IPV6: u16 = 0x86dd;
 
 fn getaddr(data: &[u8], offset: usize, size: usize) -> Result<u128, &str> {
-    if size <= 0 || size % 8 != 0 {
+    if size % 8 != 0 {
         println!("{size}");
         return Err("Size must be positive multiple of 8");
     }
@@ -32,30 +33,30 @@ fn getaddr(data: &[u8], offset: usize, size: usize) -> Result<u128, &str> {
 
 fn int_to_mac_str(addr: &u64, formatted: &mut String) {
     let bytes = addr.to_be_bytes();
-    formatted.push_str(&format!("{:02x}", bytes[0]));
+    write!(formatted, "{:02x}", bytes[0]).unwrap();
     for byte in bytes.iter() {
-        formatted.push_str(&format!(":{:02x}", byte));
+        write!(formatted, ":{:02x}", byte).unwrap();
     }
 }
 
 fn int_to_ipv6_str(addr: &u128, formatted: &mut String) {
     let bytes = addr.to_be_bytes();
-    formatted.push_str(&format!("{:02x}{:02x}", bytes[0], bytes[1]));
+    write!(formatted, "{:02x}{:02x}", bytes[0], bytes[1]).unwrap();
     for pair in bytes
         .iter()
         .skip(2)
         .step_by(2)
         .zip(bytes.iter().skip(3).step_by(2))
     {
-        formatted.push_str(&format!(":{:02x}{:02x}", pair.0, pair.1));
+        write!(formatted, ":{:02x}{:02x}", pair.0, pair.1).unwrap();
     }
 }
 
 fn int_to_ipv4_str(addr: &u32, formatted: &mut String) {
     let bytes = addr.to_be_bytes();
-    formatted.push_str(&format!("{}", bytes[0]));
+    write!(formatted, "{}", bytes[0]).unwrap();
     for byte in bytes.iter().skip(1) {
-        formatted.push_str(&format!(".{}", byte));
+        write!(formatted, ".{}", byte).unwrap();
     }
 }
 
@@ -144,7 +145,7 @@ impl PacketSummary {
 
         pktsum.resolve = resolve_dns;
 
-        let l3_offset = match handle_eth(&pkt, 0, &mut pktsum) {
+        let l3_offset = match handle_eth(pkt, 0, &mut pktsum) {
             Ok(o) => o,
             Err(_) => return pktsum,  // cannot continue
         };
@@ -153,7 +154,7 @@ impl PacketSummary {
             IPV6 => handle_ipv6,
             _ => handle_unknown,
         };
-        let l4_offset = match l3_callback(&pkt, l3_offset, &mut pktsum) {
+        let l4_offset = match l3_callback(pkt, l3_offset, &mut pktsum) {
             Ok(o) => o,
             Err(_) => return pktsum,  // cannot continue
         };
@@ -177,28 +178,27 @@ impl fmt::Display for PacketSummary {
         let mut l3_dst = String::new();
         let l4_sport = match self.l4_sport {
             0 => String::new(),
-            non_zero => format!(":{}", non_zero.to_string()),
+            non_zero => format!(":{}", non_zero),
         };
         let l4_dport = match self.l4_dport {
             0 => String::new(),
-            non_zero => format!(":{}", non_zero.to_string()),
+            non_zero => format!(":{}", non_zero),
         };
         let next_proto = self.next_proto.to_string();
 
-        let is_ip;
-        match self.ethertype {
+        let is_ip = match self.ethertype {
             IPV6 => {
                 int_to_ipv6_str(&self.l3_src, &mut l3_src);
                 int_to_ipv6_str(&self.l3_dst, &mut l3_dst);
-                is_ip = true;
+                true
             },
             IPV4 => {
                 int_to_ipv4_str(&(self.l3_src as u32), &mut l3_src);
                 int_to_ipv4_str(&(self.l3_dst as u32), &mut l3_dst);
-                is_ip = true;
+                true
             },
-            _ => is_ip = false,
-        }
+            _ => false,
+        };
 
         if is_ip {
 
