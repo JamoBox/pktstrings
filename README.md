@@ -9,6 +9,8 @@ It finds anything looking like an ASCII string in your PCAP and dumps the packet
 ![image](https://user-images.githubusercontent.com/2273100/189233990-47fed77f-588e-4902-9f50-fe9b0f05f68f.png)
 
 ## Install
+Requires libpcap headers (or Npcap on Windows) to be installed.
+
 To build full release:
 `cargo build --release`
 
