@@ -30,8 +30,8 @@ fn getaddr(data: &[u8], offset: usize, size: usize) -> Result<u128, &str> {
 
 fn int_to_mac_str(addr: &u64, formatted: &mut String) {
     let bytes = addr.to_be_bytes();
-    write!(formatted, "{:02x}", bytes[0]).unwrap();
-    for byte in bytes.iter() {
+    write!(formatted, "{:02x}", bytes[2]).unwrap();
+    for byte in bytes[3..].iter() {
         write!(formatted, ":{:02x}", byte).unwrap();
     }
 }
@@ -211,10 +211,12 @@ impl fmt::Display for PacketSummary {
         } else {
             let mut l2_src = String::new();
             let mut l2_dst = String::new();
-            let ethertype = self.ethertype.to_string();
+            let mut ethertype = String::new();
 
             int_to_mac_str(&(self.l2_src as u64), &mut l2_src);
             int_to_mac_str(&(self.l2_dst as u64), &mut l2_dst);
+
+            write!(ethertype, "{:04x}", self.ethertype)?;
 
             write!(
                 f,
