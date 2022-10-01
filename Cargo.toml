@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-clap = {version = "3", features = ["derive"]}
+clap = {version = "4", features = ["derive"]}
 pcap = "0"
 colored = "2"
 dns-lookup = {version = "1", optional = true}
