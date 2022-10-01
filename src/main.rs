@@ -1,4 +1,4 @@
-use clap::{CommandFactory, Error, Parser};
+use clap::{CommandFactory, ColorChoice, Error, Parser};
 use clap::error::ErrorKind;
 use colored::*;
 use pcap::Capture;
@@ -14,7 +14,7 @@ const HELP_PRINT: &str = "Print packet info on every new line (grep friendly)";
 const HELP_RESOLVE_DNS: &str = "Try to resolve addresses";
 
 #[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None, arg_required_else_help = true)]
+#[clap(author, version, about, long_about = None, arg_required_else_help = true, color = ColorChoice::Always)]
 struct Cli {
     #[clap(short, long = "bytes", value_parser, default_value_t = 7, help = HELP_NUMBER)]
     number: u32,
@@ -46,7 +46,7 @@ fn main() -> Result<(), Error> {
 
     let mut cap = match Capture::from_file(file) {
         Ok(cap) => cap,
-        Err(err) => return Err(cmd.error(ErrorKind::InvalidValue, err)),
+        Err(err) => cmd.error(ErrorKind::InvalidValue, err).exit(),
     };
 
     let mut pkt_count = 0;
