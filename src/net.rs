@@ -15,6 +15,7 @@ const UDP: u8 = 17;
 
 const IPV4: u16 = 0x0800;
 const IPV6: u16 = 0x86dd;
+const VLAN: u16 = 0x8100;
 
 fn getaddr(data: &[u8], offset: usize, size: usize) -> Result<u128, &str> {
     if size % 8 != 0 {
@@ -60,9 +61,22 @@ fn int_to_ipv4_str(addr: &u32, formatted: &mut String) {
 fn handle_eth(pkt: &Packet, offset: usize, pktsum: &mut PacketSummary) -> Result<usize, String> {
     pktsum.l2_dst = getaddr(pkt, offset, 48).ok();
     pktsum.l2_src = getaddr(pkt, offset + 6, 48).ok();
-    pktsum.ethertype = Some(((pkt.data[12] as u16) << 8) | (pkt.data[13] as u16));
 
-    Ok(14)
+    let ethertype = ((pkt.data[offset + 12] as u16) << 8) | (pkt.data[offset + 13] as u16);
+
+    pktsum.ethertype = match ethertype {
+        VLAN => {
+            let vid = {
+                (((pkt.data[offset + 14] as u16) & 0x0fff) << 8) |
+                (pkt.data[offset + 15] as u16)
+            };
+            pktsum.vlan_id = Some(vid);
+            Some(((pkt.data[offset + 16] as u16) << 8) | (pkt.data[offset + 17] as u16))
+        },
+        _ => Some(ethertype),
+    };
+
+    Ok(offset + 14)
 }
 
 fn handle_ipv4(pkt: &Packet, offset: usize, pktsum: &mut PacketSummary) -> Result<usize, String> {
@@ -99,6 +113,7 @@ pub struct PacketSummary {
     pub l2_src: Option<u128>,
     pub l2_dst: Option<u128>,
     pub ethertype: Option<u16>,
+    pub vlan_id: Option<u16>,
     pub l3_src: Option<u128>,
     pub l3_dst: Option<u128>,
     pub next_proto: Option<u8>,
@@ -110,9 +125,10 @@ pub struct PacketSummary {
 impl PacketSummary {
     pub fn new() -> Self {
         Self {
-            ethertype: None,
             l2_src: None,
             l2_dst: None,
+            ethertype: None,
+            vlan_id: None,
             l3_src: None,
             l3_dst: None,
             next_proto: None,
@@ -197,26 +213,38 @@ impl fmt::Display for PacketSummary {
                 let srcip: IpAddr = l3_src.parse().unwrap();
                 let dstip: IpAddr = l3_dst.parse().unwrap();
 
-                match lookup_addr(&srcip) {
-                    Ok(r) => l3_src = r,
-                    Err(_) => {}
+                if let Ok(r) = lookup_addr(&srcip) {
+                    l3_src = r;
                 }
 
-                match lookup_addr(&dstip) {
-                    Ok(r) => l3_src = r,
-                    Err(_) => {}
+                if let Ok(r) = lookup_addr(&dstip) {
+                    l3_dst = r;
                 }
             }
 
-            write!(
-                f,
-                "[{}{} → {}{} ({})]",
-                l3_src.magenta(),
-                l4_sport.cyan(),
-                l3_dst.magenta(),
-                l4_dport.cyan(),
-                next_proto.green(),
-            )
+            if let Some(vlan_id) = self.vlan_id {
+                let tag = vlan_id.to_string();
+                write!(
+                    f,
+                    "[Dot1Q: {} | {}{} → {}{} ({})]",
+                    tag.yellow(),
+                    l3_src.magenta(),
+                    l4_sport.cyan(),
+                    l3_dst.magenta(),
+                    l4_dport.cyan(),
+                    next_proto.green(),
+                )
+            } else {
+                write!(
+                    f,
+                    "[{}{} → {}{} ({})]",
+                    l3_src.magenta(),
+                    l4_sport.cyan(),
+                    l3_dst.magenta(),
+                    l4_dport.cyan(),
+                    next_proto.green(),
+                )
+            }
         } else {
             let mut l2_src = String::new();
             let mut l2_dst = String::new();

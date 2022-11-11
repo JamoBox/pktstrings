@@ -1,5 +1,5 @@
-use clap::{CommandFactory, ColorChoice, Error, Parser};
 use clap::error::ErrorKind;
+use clap::{ColorChoice, CommandFactory, Error, Parser};
 use colored::*;
 use pcap::Capture;
 use std::path::Path;
