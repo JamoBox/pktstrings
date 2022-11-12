@@ -1,14 +1,13 @@
+use cfg_if::cfg_if;
 use colored::*;
 use pcap::Packet;
-use std::fmt;
+use std::collections::HashMap;
 use std::fmt::Write;
+use std::net::IpAddr;
 use std::result::Result;
 
 #[cfg(feature = "resolve")]
 use dns_lookup::lookup_addr;
-
-#[cfg(feature = "resolve")]
-use std::net::IpAddr;
 
 const TCP: u8 = 6;
 const UDP: u8 = 17;
@@ -24,7 +23,7 @@ fn getaddr(data: &[u8], offset: usize, size: usize) -> Result<u128, &str> {
     }
     let mut addr: u128 = 0;
     for i in 0..(size / 8) {
-        addr |= (data[offset + i] as u128) << ((size - 8) - (8 * i)) 
+        addr |= (data[offset + i] as u128) << ((size - 8) - (8 * i))
     }
     Ok(addr)
 }
@@ -62,21 +61,22 @@ fn handle_eth(pkt: &Packet, offset: usize, pktsum: &mut PacketSummary) -> Result
     pktsum.l2_dst = getaddr(pkt, offset, 48).ok();
     pktsum.l2_src = getaddr(pkt, offset + 6, 48).ok();
 
+    let mut vlan_padding = 0;
     let ethertype = ((pkt.data[offset + 12] as u16) << 8) | (pkt.data[offset + 13] as u16);
 
     pktsum.ethertype = match ethertype {
         VLAN => {
             let vid = {
-                (((pkt.data[offset + 14] as u16) & 0x0fff) << 8) |
-                (pkt.data[offset + 15] as u16)
+                (((pkt.data[offset + 14] as u16) & 0x0fff) << 8) | (pkt.data[offset + 15] as u16)
             };
             pktsum.vlan_id = Some(vid);
+            vlan_padding = 4;
             Some(((pkt.data[offset + 16] as u16) << 8) | (pkt.data[offset + 17] as u16))
-        },
+        }
         _ => Some(ethertype),
     };
 
-    Ok(offset + 14)
+    Ok(offset + 14 + vlan_padding)
 }
 
 fn handle_ipv4(pkt: &Packet, offset: usize, pktsum: &mut PacketSummary) -> Result<usize, String> {
@@ -108,8 +108,8 @@ fn handle_unknown(
     Err("Unknown protocol".to_string())
 }
 
-#[derive(Eq, PartialEq, Hash)]
-pub struct PacketSummary {
+#[derive(Eq, PartialEq)]
+pub struct PacketSummary<'a> {
     pub l2_src: Option<u128>,
     pub l2_dst: Option<u128>,
     pub ethertype: Option<u16>,
@@ -119,10 +119,10 @@ pub struct PacketSummary {
     pub next_proto: Option<u8>,
     pub l4_sport: Option<u16>,
     pub l4_dport: Option<u16>,
-    pub resolve: bool,
+    pub resolver: Option<&'a mut HashMap<IpAddr, String>>,
 }
 
-impl PacketSummary {
+impl<'a> PacketSummary<'a> {
     pub fn new() -> Self {
         Self {
             l2_src: None,
@@ -134,14 +134,13 @@ impl PacketSummary {
             next_proto: None,
             l4_sport: None,
             l4_dport: None,
-            resolve: false,
+            resolver: None,
         }
     }
 
-    pub fn from_packet(pkt: &Packet, resolve_dns: bool) -> Self {
+    pub fn from_packet(pkt: &Packet, resolver: Option<&'a mut HashMap<IpAddr, String>>) -> Self {
         let mut pktsum = Self::new();
-
-        pktsum.resolve = resolve_dns;
+        pktsum.resolver = resolver;
 
         let l3_offset = match handle_eth(pkt, 0, &mut pktsum) {
             Ok(o) => o,
@@ -168,83 +167,105 @@ impl PacketSummary {
         }
         pktsum
     }
-}
 
-impl fmt::Display for PacketSummary {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    pub fn to_string(&mut self) -> String {
+        let mut out = String::from("[");
+
         let mut l3_src = String::new();
         let mut l3_dst = String::new();
 
+        if let Some(vlan_id) = self.vlan_id {
+            let tag = vlan_id.to_string();
+            out.push_str(format!("Dot1Q: {} | ", tag.yellow()).as_str());
+        }
+
         let l4_sport = match self.l4_sport {
-            Some(non_zero) => format!(":{}", non_zero),
+            Some(p) => format!(":{}", p),
             None => String::new(),
         };
 
         let l4_dport = match self.l4_dport {
-            Some(non_zero) => format!(":{}", non_zero),
+            Some(p) => format!(":{}", p),
             None => String::new(),
         };
 
-        let next_proto = if let Some(np) = self.next_proto {
-            np.to_string()
-        } else {
-            "-".to_string()
+        let next_proto = match self.next_proto {
+            Some(np) => np.to_string(),
+            None => "-".to_string(),
         };
 
         let is_ip = match self.ethertype {
-            // defaulting IPs to 0 is weird, but having an ethertype set as IP
-            // and not actually having an IP value is probably weirder?
             Some(IPV6) => {
-                int_to_ipv6_str(&self.l3_src.unwrap_or(0), &mut l3_src);
-                int_to_ipv6_str(&self.l3_dst.unwrap_or(0), &mut l3_dst);
+                int_to_ipv6_str(&self.l3_src.unwrap(), &mut l3_src);
+                int_to_ipv6_str(&self.l3_dst.unwrap(), &mut l3_dst);
                 true
-            },
+            }
             Some(IPV4) => {
-                int_to_ipv4_str(&(self.l3_src.unwrap_or(0) as u32), &mut l3_src);
-                int_to_ipv4_str(&(self.l3_dst.unwrap_or(0) as u32), &mut l3_dst);
+                int_to_ipv4_str(&(self.l3_src.unwrap() as u32), &mut l3_src);
+                int_to_ipv4_str(&(self.l3_dst.unwrap() as u32), &mut l3_dst);
                 true
-            },
+            }
             _ => false,
         };
 
         if is_ip {
-            #[cfg(feature = "resolve")]
-            if self.resolve {
-                let srcip: IpAddr = l3_src.parse().unwrap();
-                let dstip: IpAddr = l3_dst.parse().unwrap();
+            cfg_if! {
+                if #[cfg(feature = "resolve")] {
+                    if let Some(resolver) = &mut self.resolver {
+                        let srcip: IpAddr = l3_src.parse().unwrap();
+                        let dstip: IpAddr = l3_dst.parse().unwrap();
 
-                if let Ok(r) = lookup_addr(&srcip) {
-                    l3_src = r;
-                }
+                        let l3_src_resolved = resolver.entry(srcip).or_insert_with(|| {
+                            match lookup_addr(&srcip) {
+                                Ok(addr) => addr,
+                                Err(_) => l3_src.to_string(),
+                            }
+                        });
+                        out.push_str(
+                            format!(
+                                "{}{} → ",
+                                l3_src_resolved.magenta(),
+                                l4_sport.cyan(),
+                            ).as_str()
+                        );
 
-                if let Ok(r) = lookup_addr(&dstip) {
-                    l3_dst = r;
+                        let l3_dst_resolved = resolver.entry(dstip).or_insert_with(|| {
+                            match lookup_addr(&dstip) {
+                                Ok(addr) => addr,
+                                Err(_) => l3_dst.to_string(),
+                            }
+                        });
+                        out.push_str(
+                            format!(
+                                "{}{} ",
+                                l3_dst_resolved.magenta(),
+                                l4_dport.cyan(),
+                            ).as_str()
+                        );
+                    } else {
+                        out.push_str(
+                            format!(
+                                "{}{} → {}{} ",
+                                l3_src.magenta(),
+                                l4_sport.cyan(),
+                                l3_dst.magenta(),
+                                l4_dport.cyan(),
+                            ).as_str()
+                        );
+                    }
+                } else {
+                    out.push_str(
+                        format!(
+                            "{}{} → {}{} ",
+                            l3_src.magenta(),
+                            l4_sport.cyan(),
+                            l3_dst.magenta(),
+                            l4_dport.cyan(),
+                        ).as_str()
+                    );
                 }
             }
-
-            if let Some(vlan_id) = self.vlan_id {
-                let tag = vlan_id.to_string();
-                write!(
-                    f,
-                    "[Dot1Q: {} | {}{} → {}{} ({})]",
-                    tag.yellow(),
-                    l3_src.magenta(),
-                    l4_sport.cyan(),
-                    l3_dst.magenta(),
-                    l4_dport.cyan(),
-                    next_proto.green(),
-                )
-            } else {
-                write!(
-                    f,
-                    "[{}{} → {}{} ({})]",
-                    l3_src.magenta(),
-                    l4_sport.cyan(),
-                    l3_dst.magenta(),
-                    l4_dport.cyan(),
-                    next_proto.green(),
-                )
-            }
+            out.push_str(format!("({})", next_proto.green()).as_str());
         } else {
             let mut l2_src = String::new();
             let mut l2_dst = String::new();
@@ -258,14 +279,24 @@ impl fmt::Display for PacketSummary {
                 _ => write!(ethertype, "----").ok(),
             };
 
-
-            write!(
-                f,
-                "[{} → {} ({})]",
-                l2_src.magenta(),
-                l2_dst.magenta(),
-                ethertype.green(),
-            )
+            out.push_str(
+                format!(
+                    "{} → {} ({})",
+                    l2_src.magenta(),
+                    l2_dst.magenta(),
+                    ethertype.green(),
+                )
+                .as_str(),
+            );
         }
+        out.push(']');
+        out
     }
 }
+
+// use std::fmt
+// impl <'a>fmt::Display for PacketSummary<'a> {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         write!(f, "{}", self.to_string())
+//     }
+// }

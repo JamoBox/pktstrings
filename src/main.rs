@@ -1,7 +1,10 @@
+use cfg_if::cfg_if;
 use clap::error::ErrorKind;
 use clap::{ColorChoice, CommandFactory, Error, Parser};
 use colored::*;
 use pcap::Capture;
+use std::collections::HashMap;
+use std::net::IpAddr;
 use std::path::Path;
 
 mod net;
@@ -50,12 +53,26 @@ fn main() -> Result<(), Error> {
     };
 
     let mut pkt_count = 0;
+
+    let mut resolver: Option<Box<HashMap<IpAddr, String>>>;
+
+    cfg_if! {
+        if #[cfg(feature = "resolve")] {
+            if cli.resolve_dns {
+                resolver = Some(Box::new(HashMap::new()));
+            } else {
+                resolver = None;
+            }
+        } else {
+            resolver = None;
+        }
+    }
+
     while let Ok(pkt) = cap.next_packet() {
         pkt_count += 1;
         let mut printed = false;
         let mut chars = 0;
         let mut partial = String::new();
-        let resolve = cfg!(feature = "resolve");
         for byte in pkt.data {
             let c = *byte as char;
             // TODO: other encodings
@@ -66,10 +83,17 @@ fn main() -> Result<(), Error> {
                 } else {
                     partial.push(c);
                     if chars == cli.number {
-                        let pktsum = net::PacketSummary::from_packet(&pkt, resolve);
+                        let mut pktsum: net::PacketSummary;
+                        if let Some(ref mut r) = resolver {
+                            pktsum = net::PacketSummary::from_packet(&pkt, Some(&mut *r));
+                        } else {
+                            pktsum = net::PacketSummary::from_packet(&pkt, None);
+                        }
+
                         let idx = pkt_count.to_string().blue();
                         if !printed || cli.print {
-                            print!("[{idx}]{pktsum}: ");
+                            let pkt_str = pktsum.to_string();
+                            print!("[{idx}]{pkt_str}: ");
                             printed = true;
                             if !cli.print {
                                 println!();
@@ -90,6 +114,5 @@ fn main() -> Result<(), Error> {
             println!();
         }
     }
-
     Ok(())
 }
