@@ -25,6 +25,6 @@ Output binary will be in `./target/release/pktstrings`.
 Run pktstrings with `-h` for help and available options.
 
 ## TODO:
-- Optimisations (e.g. Cache DNS lookups with resolve feature)
+- Optimisations (e.g. Faster lookups)
 - Other encodings
 - Better protocol support (e.g. IPv6 header parsing?)

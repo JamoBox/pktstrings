@@ -11,7 +11,7 @@ mod net;
 
 const HELP_NUMBER: &str = "Number of printable characters to display";
 const HELP_FILE: &str = "PCAP format input file";
-const HELP_PRINT: &str = "Print packet info on every new line (grep friendly)";
+const HELP_BLOCK_PRINT: &str = "Print string blocks without packet info on each line";
 
 #[cfg(feature = "resolve")]
 const HELP_RESOLVE_DNS: &str = "Try to resolve addresses";
@@ -25,8 +25,8 @@ struct Cli {
     #[clap(short, long, value_parser, default_value = "", help = HELP_FILE)]
     file: String,
 
-    #[clap(short, long, value_parser, default_value_t = false, help = HELP_PRINT)]
-    print: bool,
+    #[clap(short, long, value_parser, default_value_t = false, help = HELP_BLOCK_PRINT)]
+    block_print: bool,
 
     #[cfg(feature = "resolve")]
     #[clap(short, long, value_parser, default_value_t = false, help = HELP_RESOLVE_DNS)]
@@ -91,11 +91,11 @@ fn main() -> Result<(), Error> {
                         }
 
                         let idx = pkt_count.to_string().blue();
-                        if !printed || cli.print {
+                        if !printed || !cli.block_print {
                             let pkt_str = pktsum.to_string();
                             print!("[{idx}]{pkt_str}: ");
                             printed = true;
-                            if !cli.print {
+                            if cli.block_print {
                                 println!();
                             }
                         }
