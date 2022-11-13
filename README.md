@@ -8,23 +8,23 @@ It finds anything looking like an ASCII string in your PCAP and dumps the packet
 
 ![image](https://user-images.githubusercontent.com/2273100/201542679-2ce4e1c9-bb0e-40f5-899e-c75c55dbe860.png)
 
+Requires libpcap headers (or Npcap on Windows) to build.
+
 ## Install
-Requires libpcap headers (or Npcap on Windows) to be installed.
+To install binary:
+`cargo install --path .`
 
-To build full release:
-`cargo build --release`
+To install with optional DNS resolver flag (`-r, --resolve-dns`):
+`cargo install --features=resolve --release`
 
-To build with optional DNS resolver flag (`-r, --resolve-dns`):
-`cargo build --features=resolve --release`
-
-To build with colour output disabled:
-`cargo build --features=bland --release`
+To install with colour output disabled:
+`cargo install --features=bland --release`
 
 ## Running
-Output binary will be in `./target/release/pktstrings`.
+Default install location is `~/.cargo/bin/pktstrings`.
 Run pktstrings with `-h` for help and available options.
 
 ## TODO:
-- Optimisations (e.g. Faster lookups)
+- Optimisations
 - Other encodings
 - Better protocol support (e.g. IPv6 header parsing?)
