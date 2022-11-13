@@ -85,7 +85,7 @@ fn main() -> Result<(), Error> {
                     if chars == cli.number {
                         let mut pktsum: net::PacketSummary;
                         if let Some(ref mut r) = resolver {
-                            pktsum = net::PacketSummary::from_packet(&pkt, Some(&mut *r));
+                            pktsum = net::PacketSummary::from_packet(&pkt, Some(r));
                         } else {
                             pktsum = net::PacketSummary::from_packet(&pkt, None);
                         }

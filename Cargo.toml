@@ -1,6 +1,6 @@
 [package]
 name = "pktstrings"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 
 [dependencies]
@@ -14,3 +14,6 @@ cfg-if = "1"
 [features]
 bland = ["colored/no-color"]
 resolve = ["dns-lookup"]
+
+[profile.release]
+lto = true
