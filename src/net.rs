@@ -1,5 +1,5 @@
-use cfg_if::cfg_if;
 use colored::*;
+use cfg_if::cfg_if;
 use pcap::Packet;
 use std::collections::HashMap;
 use std::fmt::Write;
@@ -23,7 +23,7 @@ fn getaddr(data: &[u8], offset: usize, size: usize) -> Result<u128, &str> {
     }
     let mut addr: u128 = 0;
     for i in 0..(size / 8) {
-        addr |= (data[offset + i] as u128) << ((size - 8) - (8 * i))
+        addr |= (data[offset + i] as u128) << ((size - 8) - (8 * i)) 
     }
     Ok(addr)
 }
@@ -67,12 +67,13 @@ fn handle_eth(pkt: &Packet, offset: usize, pktsum: &mut PacketSummary) -> Result
     pktsum.ethertype = match ethertype {
         VLAN => {
             let vid = {
-                (((pkt.data[offset + 14] as u16) & 0x0fff) << 8) | (pkt.data[offset + 15] as u16)
+                (((pkt.data[offset + 14] as u16) & 0x0fff) << 8) |
+                (pkt.data[offset + 15] as u16)
             };
             pktsum.vlan_id = Some(vid);
             vlan_padding = 4;
             Some(((pkt.data[offset + 16] as u16) << 8) | (pkt.data[offset + 17] as u16))
-        }
+        },
         _ => Some(ethertype),
     };
 
@@ -122,7 +123,7 @@ pub struct PacketSummary<'a> {
     pub resolver: Option<&'a mut HashMap<IpAddr, String>>,
 }
 
-impl<'a> PacketSummary<'a> {
+impl <'a>PacketSummary<'a> {
     pub fn new() -> Self {
         Self {
             l2_src: None,
@@ -168,7 +169,7 @@ impl<'a> PacketSummary<'a> {
         pktsum
     }
 
-    pub fn to_string(&mut self) -> String {
+    pub fn formatted(&mut self) -> String {
         let mut out = String::from("[");
 
         let mut l3_src = String::new();
@@ -199,12 +200,12 @@ impl<'a> PacketSummary<'a> {
                 int_to_ipv6_str(&self.l3_src.unwrap(), &mut l3_src);
                 int_to_ipv6_str(&self.l3_dst.unwrap(), &mut l3_dst);
                 true
-            }
+            },
             Some(IPV4) => {
                 int_to_ipv4_str(&(self.l3_src.unwrap() as u32), &mut l3_src);
                 int_to_ipv4_str(&(self.l3_dst.unwrap() as u32), &mut l3_dst);
                 true
-            }
+            },
             _ => false,
         };
 
@@ -279,15 +280,12 @@ impl<'a> PacketSummary<'a> {
                 _ => write!(ethertype, "----").ok(),
             };
 
-            out.push_str(
-                format!(
-                    "{} → {} ({})",
-                    l2_src.magenta(),
-                    l2_dst.magenta(),
-                    ethertype.green(),
-                )
-                .as_str(),
-            );
+            out.push_str(format!(
+                "{} → {} ({})",
+                l2_src.magenta(),
+                l2_dst.magenta(),
+                ethertype.green(),
+            ).as_str());
         }
         out.push(']');
         out

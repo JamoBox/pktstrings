@@ -92,7 +92,7 @@ fn main() -> Result<(), Error> {
 
                         let idx = pkt_count.to_string().blue();
                         if !printed || !cli.block_print {
-                            let pkt_str = pktsum.to_string();
+                            let pkt_str = pktsum.formatted();
                             print!("[{idx}]{pkt_str}: ");
                             printed = true;
                             if cli.block_print {
