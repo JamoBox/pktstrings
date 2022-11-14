@@ -1,5 +1,5 @@
-use colored::*;
 use cfg_if::cfg_if;
+use colored::*;
 use pcap::Packet;
 use std::collections::HashMap;
 use std::fmt::Write;
@@ -9,8 +9,11 @@ use std::result::Result;
 #[cfg(feature = "resolve")]
 use dns_lookup::lookup_addr;
 
+// IP next protos with port bytes all in same place :)
 const TCP: u8 = 6;
 const UDP: u8 = 17;
+const DCCP: u8 = 33;
+const SCTP: u8 = 132;
 
 const IPV4: u16 = 0x0800;
 const IPV6: u16 = 0x86dd;
@@ -23,7 +26,7 @@ fn getaddr(data: &[u8], offset: usize, size: usize) -> Result<u128, &str> {
     }
     let mut addr: u128 = 0;
     for i in 0..(size / 8) {
-        addr |= (data[offset + i] as u128) << ((size - 8) - (8 * i)) 
+        addr |= (data[offset + i] as u128) << ((size - 8) - (8 * i))
     }
     Ok(addr)
 }
@@ -67,13 +70,12 @@ fn handle_eth(pkt: &Packet, offset: usize, pktsum: &mut PacketSummary) -> Result
     pktsum.ethertype = match ethertype {
         VLAN => {
             let vid = {
-                (((pkt.data[offset + 14] as u16) & 0x0fff) << 8) |
-                (pkt.data[offset + 15] as u16)
+                (((pkt.data[offset + 14] as u16) & 0x0fff) << 8) | (pkt.data[offset + 15] as u16)
             };
             pktsum.vlan_id = Some(vid);
             vlan_padding = 4;
             Some(((pkt.data[offset + 16] as u16) << 8) | (pkt.data[offset + 17] as u16))
-        },
+        }
         _ => Some(ethertype),
     };
 
@@ -123,7 +125,7 @@ pub struct PacketSummary<'a> {
     pub resolver: Option<&'a mut HashMap<IpAddr, String>>,
 }
 
-impl <'a>PacketSummary<'a> {
+impl<'a> PacketSummary<'a> {
     pub fn new() -> Self {
         Self {
             l2_src: None,
@@ -158,7 +160,7 @@ impl <'a>PacketSummary<'a> {
         };
 
         match pktsum.next_proto {
-            Some(TCP) | Some(UDP) => {
+            Some(TCP) | Some(UDP) | Some(DCCP) | Some(SCTP) => {
                 pktsum.l4_sport =
                     Some(((pkt.data[l4_offset] as u16) << 8) | pkt.data[l4_offset + 1] as u16);
                 pktsum.l4_dport =
@@ -191,8 +193,13 @@ impl <'a>PacketSummary<'a> {
         };
 
         let next_proto = match self.next_proto {
-            Some(np) => np.to_string(),
-            None => "-".to_string(),
+            Some(1) => "ICMP".to_string(),
+            Some(TCP) => "TCP".to_string(),
+            Some(UDP) => "UDP".to_string(),
+            Some(DCCP) => "DCCP".to_string(),
+            Some(58) => "ICMPv6".to_string(),
+            Some(SCTP) => "SCTP".to_string(),
+            _ => "-".to_string(),
         };
 
         let is_ip = match self.ethertype {
@@ -200,12 +207,12 @@ impl <'a>PacketSummary<'a> {
                 int_to_ipv6_str(&self.l3_src.unwrap(), &mut l3_src);
                 int_to_ipv6_str(&self.l3_dst.unwrap(), &mut l3_dst);
                 true
-            },
+            }
             Some(IPV4) => {
                 int_to_ipv4_str(&(self.l3_src.unwrap() as u32), &mut l3_src);
                 int_to_ipv4_str(&(self.l3_dst.unwrap() as u32), &mut l3_dst);
                 true
-            },
+            }
             _ => false,
         };
 
@@ -280,21 +287,17 @@ impl <'a>PacketSummary<'a> {
                 _ => write!(ethertype, "----").ok(),
             };
 
-            out.push_str(format!(
-                "{} → {} ({})",
-                l2_src.magenta(),
-                l2_dst.magenta(),
-                ethertype.green(),
-            ).as_str());
+            out.push_str(
+                format!(
+                    "{} → {} ({})",
+                    l2_src.magenta(),
+                    l2_dst.magenta(),
+                    ethertype.green(),
+                )
+                .as_str(),
+            );
         }
         out.push(']');
         out
     }
 }
-
-// use std::fmt
-// impl <'a>fmt::Display for PacketSummary<'a> {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         write!(f, "{}", self.to_string())
-//     }
-// }
