@@ -199,6 +199,7 @@ impl<'a> PacketSummary<'a> {
             Some(DCCP) => "DCCP".to_string(),
             Some(58) => "ICMPv6".to_string(),
             Some(SCTP) => "SCTP".to_string(),
+            Some(proto) => proto.to_string(),
             _ => "-".to_string(),
         };
 
