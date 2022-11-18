@@ -12,6 +12,7 @@ mod net;
 const HELP_NUMBER: &str = "Number of printable characters to display";
 const HELP_FILE: &str = "PCAP format input file";
 const HELP_BLOCK_PRINT: &str = "Print string blocks without packet info on each line";
+const HELP_EXPRESSION: &str = "BPF expression to filter packets with";
 
 #[cfg(feature = "resolve")]
 const HELP_RESOLVE_DNS: &str = "Try to resolve addresses";
@@ -27,6 +28,9 @@ struct Cli {
 
     #[clap(short, long, value_parser, default_value_t = false, help = HELP_BLOCK_PRINT)]
     block_print: bool,
+
+    #[clap(short = 'e', long, value_parser, default_value = "", help = HELP_EXPRESSION)]
+    bpf_expression: String,
 
     #[cfg(feature = "resolve")]
     #[clap(short, long, value_parser, default_value_t = false, help = HELP_RESOLVE_DNS)]
@@ -49,6 +53,11 @@ fn main() -> Result<(), Error> {
 
     let mut cap = match Capture::from_file(file) {
         Ok(cap) => cap,
+        Err(err) => cmd.error(ErrorKind::InvalidValue, err).exit(),
+    };
+
+    match cap.filter(&cli.bpf_expression, true) {
+        Ok(bpf) => bpf,
         Err(err) => cmd.error(ErrorKind::InvalidValue, err).exit(),
     };
 
