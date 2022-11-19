@@ -19,14 +19,16 @@ const IPV4: u16 = 0x0800;
 const IPV6: u16 = 0x86dd;
 const VLAN: u16 = 0x8100;
 
-fn getaddr(data: &[u8], offset: usize, size: usize) -> Result<u128, &str> {
-    if size % 8 != 0 {
-        println!("{size}");
-        return Err("Size must be positive multiple of 8");
+fn get_field(data: &[u8], offset: usize, bitlen: usize) -> Result<u128, &str> {
+    if bitlen % 8 != 0 {
+        println!("{bitlen}");
+        return Err("Length must be positive multiple of 8");
+    } else if bitlen > 128 {
+        return Err("Length must be less than 128 bits");
     }
     let mut addr: u128 = 0;
-    for i in 0..(size / 8) {
-        addr |= (data[offset + i] as u128) << ((size - 8) - (8 * i))
+    for i in 0..(bitlen / 8) {
+        addr |= (data[offset + i] as u128) << ((bitlen - 8) - (8 * i))
     }
     Ok(addr)
 }
@@ -61,22 +63,20 @@ fn int_to_ipv4_str(addr: &u32, formatted: &mut String) {
 }
 
 fn handle_eth(pkt: &Packet, offset: usize, pktsum: &mut PacketSummary) -> Result<usize, String> {
-    pktsum.l2_dst = getaddr(pkt, offset, 48).ok();
-    pktsum.l2_src = getaddr(pkt, offset + 6, 48).ok();
+    pktsum.l2_dst = get_field(pkt, offset, 48).ok();
+    pktsum.l2_src = get_field(pkt, offset + 6, 48).ok();
 
     let mut vlan_padding = 0;
-    let ethertype = ((pkt.data[offset + 12] as u16) << 8) | (pkt.data[offset + 13] as u16);
+    let ethertype = get_field(pkt.data, offset + 12, 16).map(|x| x as u16).ok();
 
     pktsum.ethertype = match ethertype {
-        VLAN => {
-            let vid = {
-                (((pkt.data[offset + 14] as u16) & 0x0fff) << 8) | (pkt.data[offset + 15] as u16)
-            };
-            pktsum.vlan_id = Some(vid);
+        Some(VLAN) => {
+            pktsum.vlan_id = get_field(pkt.data, offset + 14, 16).map(|x| x as u16).ok();
             vlan_padding = 4;
-            Some(((pkt.data[offset + 16] as u16) << 8) | (pkt.data[offset + 17] as u16))
+
+            get_field(pkt.data, offset + 16, 16).map(|x| x as u16).ok()
         }
-        _ => Some(ethertype),
+        _ => ethertype,
     };
 
     Ok(offset + 14 + vlan_padding)
@@ -88,16 +88,16 @@ fn handle_ipv4(pkt: &Packet, offset: usize, pktsum: &mut PacketSummary) -> Resul
     let next_offset: usize = offset + ihl as usize;
 
     pktsum.next_proto = Some(pkt.data[offset + 9]);
-    pktsum.l3_src = getaddr(pkt, offset + 12, 32).ok();
-    pktsum.l3_dst = getaddr(pkt, offset + 16, 32).ok();
+    pktsum.l3_src = get_field(pkt, offset + 12, 32).ok();
+    pktsum.l3_dst = get_field(pkt, offset + 16, 32).ok();
 
     Ok(next_offset)
 }
 
 fn handle_ipv6(pkt: &Packet, offset: usize, pktsum: &mut PacketSummary) -> Result<usize, String> {
     pktsum.next_proto = Some(pkt.data[offset + 6]);
-    pktsum.l3_src = getaddr(pkt, offset + 8, 128).ok();
-    pktsum.l3_dst = getaddr(pkt, offset + 24, 128).ok();
+    pktsum.l3_src = get_field(pkt, offset + 8, 128).ok();
+    pktsum.l3_dst = get_field(pkt, offset + 24, 128).ok();
 
     // TODO: parse headers
     Ok(offset + 40)
@@ -161,10 +161,10 @@ impl<'a> PacketSummary<'a> {
 
         match pktsum.next_proto {
             Some(TCP) | Some(UDP) | Some(DCCP) | Some(SCTP) => {
-                pktsum.l4_sport =
-                    Some(((pkt.data[l4_offset] as u16) << 8) | pkt.data[l4_offset + 1] as u16);
-                pktsum.l4_dport =
-                    Some(((pkt.data[l4_offset + 2] as u16) << 8) | pkt.data[l4_offset + 3] as u16);
+                let sport_offset = l4_offset;
+                let dport_offset = l4_offset + 2;
+                pktsum.l4_sport = get_field(pkt.data, sport_offset, 16).ok().map(|x| x as u16);
+                pktsum.l4_dport = get_field(pkt.data, dport_offset, 16).ok().map(|x| x as u16);
             }
             _ => {}
         }
