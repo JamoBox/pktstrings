@@ -34,7 +34,15 @@ struct Cli {
     resolve_dns: bool,
 
     // deprecated file flag
-    #[clap(short, long = "file", value_parser, default_value = "", hide = true, conflicts_with = "file", required = true)]
+    #[clap(
+        short,
+        long = "file",
+        value_parser,
+        default_value = "",
+        hide = true,
+        conflicts_with = "file",
+        required = true
+    )]
     file_old: Option<String>,
 
     #[clap(value_parser, help = HELP_FILE, required = true)]
@@ -45,7 +53,7 @@ fn main() -> Result<(), Error> {
     let mut cli = Cli::parse();
 
     if let Some(file) = &cli.file_old {
-        if file != "" {
+        if !file.is_empty() {
             cli.file = cli.file_old.clone();
         }
     }
@@ -53,22 +61,14 @@ fn main() -> Result<(), Error> {
     let mut cmd = Cli::command();
 
     if cli.file.is_none() {
-        cmd.error(
-            ErrorKind::InvalidValue,
-            "file required!",
-        )
-        .exit();
+        cmd.error(ErrorKind::InvalidValue, "file required!").exit();
     }
 
     let file = &cli.file.unwrap();
     let filepath = Path::new(file);
 
     if !filepath.exists() {
-        cmd.error(
-            ErrorKind::InvalidValue,
-            "file not found",
-        )
-        .exit();
+        cmd.error(ErrorKind::InvalidValue, "file not found").exit();
     }
 
     let mut cap = match Capture::from_file(filepath) {
