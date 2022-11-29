@@ -21,7 +21,6 @@ const VLAN: u16 = 0x8100;
 
 fn get_field(data: &[u8], offset: usize, bitlen: usize) -> Result<u128, &str> {
     if bitlen % 8 != 0 {
-        println!("{bitlen}");
         return Err("Length must be positive multiple of 8");
     } else if bitlen > 128 {
         return Err("Length must be less than 128 bits");

@@ -18,48 +18,70 @@ const HELP_EXPRESSION: &str = "BPF expression to filter packets with";
 const HELP_RESOLVE_DNS: &str = "Try to resolve addresses";
 
 #[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None, arg_required_else_help = true, color = ColorChoice::Always)]
+#[clap(author, version, about, long_about, arg_required_else_help = true, color = ColorChoice::Always)]
 struct Cli {
     #[clap(short, long = "bytes", value_parser, default_value_t = 7, help = HELP_NUMBER)]
     number: u32,
 
-    #[clap(short, long, value_parser, default_value = "", help = HELP_FILE)]
-    file: String,
-
     #[clap(short, long, value_parser, default_value_t = false, help = HELP_BLOCK_PRINT)]
     block_print: bool,
 
-    #[clap(short = 'e', long, value_parser, default_value = "", help = HELP_EXPRESSION)]
-    bpf_expression: String,
+    #[clap(short = 'e', long, value_parser, help = HELP_EXPRESSION)]
+    bpf_expression: Option<String>,
 
     #[cfg(feature = "resolve")]
     #[clap(short, long, value_parser, default_value_t = false, help = HELP_RESOLVE_DNS)]
     resolve_dns: bool,
+
+    // deprecated file flag
+    #[clap(short, long = "file", value_parser, default_value = "", hide = true, conflicts_with = "file", required = true)]
+    file_old: Option<String>,
+
+    #[clap(value_parser, help = HELP_FILE, required = true)]
+    file: Option<String>,
 }
 
 fn main() -> Result<(), Error> {
-    let cli = Cli::parse();
+    let mut cli = Cli::parse();
+
+    if let Some(file) = &cli.file_old {
+        if file != "" {
+            cli.file = cli.file_old.clone();
+        }
+    }
+
     let mut cmd = Cli::command();
 
-    let file = Path::new(&cli.file);
-
-    if !file.exists() {
+    if cli.file.is_none() {
         cmd.error(
             ErrorKind::InvalidValue,
-            format!("file not found: {}", cli.file),
+            "file required!",
         )
         .exit();
     }
 
-    let mut cap = match Capture::from_file(file) {
+    let file = &cli.file.unwrap();
+    let filepath = Path::new(file);
+
+    if !filepath.exists() {
+        cmd.error(
+            ErrorKind::InvalidValue,
+            "file not found",
+        )
+        .exit();
+    }
+
+    let mut cap = match Capture::from_file(filepath) {
         Ok(cap) => cap,
         Err(err) => cmd.error(ErrorKind::InvalidValue, err).exit(),
     };
 
-    match cap.filter(&cli.bpf_expression, true) {
-        Ok(bpf) => bpf,
-        Err(err) => cmd.error(ErrorKind::InvalidValue, err).exit(),
-    };
+    if let Some(bpf) = &cli.bpf_expression {
+        match cap.filter(bpf, true) {
+            Ok(bpf) => bpf,
+            Err(err) => cmd.error(ErrorKind::InvalidValue, err).exit(),
+        };
+    }
 
     let mut pkt_count = 0;
 
