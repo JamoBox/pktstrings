@@ -3,7 +3,7 @@ name = "pktstrings"
 version = "0.2.2"
 edition = "2021"
 rust-version = "1.60"
-author = "Pete Wicken <petew1356@gmail.com>"
+authors = ["Pete Wicken <petew1356@gmail.com>"]
 description = "Like Unix 'strings' command but packet-aware"
 repository = "https://github.com/JamoBox/pktstrings"
 license = "MIT"
@@ -11,7 +11,7 @@ keywords = ["packet-analyzer", "network-monitoring", "network-analysis", "ctf-to
 categories = ["command-line-utilities", "network-programming"]
 
 [dependencies]
-clap = {version = "4", features = ["derive"]}
+clap = {version = "4", features = ["derive", "cargo"]}
 pcap = "0"
 colored = "2"
 num = "0"

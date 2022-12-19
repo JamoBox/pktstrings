@@ -19,6 +19,8 @@ const IPV4: u16 = 0x0800;
 const IPV6: u16 = 0x86dd;
 const VLAN: u16 = 0x8100;
 
+pub type Resolver = HashMap<IpAddr, String>;
+
 fn get_field(data: &[u8], offset: usize, bitlen: usize) -> Result<u128, &str> {
     if bitlen % 8 != 0 {
         return Err("Length must be positive multiple of 8");
