@@ -69,7 +69,12 @@ fn apply_filter<T: Activated>(cap: &mut Capture<T>, bpf: &Option<String>, cmd: &
     }
 }
 
-fn dump_strings<T: Activated>(cap: &mut Capture<T>, len: &u32, resolver: &mut Option<Box<net::Resolver>>, block_print: &bool) {
+fn dump_strings<T: Activated>(
+    cap: &mut Capture<T>,
+    len: &u32,
+    resolver: &mut Option<Box<net::Resolver>>,
+    block_print: &bool,
+) {
     let mut pkt_count = 0;
 
     while let Ok(pkt) = cap.next_packet() {
@@ -125,9 +130,13 @@ fn main() -> Result<(), clap::Error> {
     let mut cmd = Cli::command();
 
     if cli.list_devices {
-        let devices: Vec<String> = Device::list().unwrap_or_default().iter().map(|x| x.name.clone()).collect();
+        let devices: Vec<String> = Device::list()
+            .unwrap_or_default()
+            .iter()
+            .map(|x| x.name.clone())
+            .collect();
         println!("{}", devices.join("\t"));
-        return Ok(())
+        return Ok(());
     }
 
     let mut resolver: Option<Box<net::Resolver>>;
@@ -156,12 +165,12 @@ fn main() -> Result<(), clap::Error> {
             Ok(mut cap) => {
                 apply_filter(&mut cap, &cli.bpf_expression, &mut cmd);
                 dump_strings(&mut cap, &cli.number, &mut resolver, &cli.block_print);
-            },
+            }
             Err(err) => cmd.error(ErrorKind::InvalidValue, err).exit(),
         };
     } else if cli.interface.is_some() {
         let intf = cli.interface.unwrap();
-        let mut devices: Vec<Device> = vec!();
+        let mut devices: Vec<Device> = vec![];
 
         devices.append(&mut Device::list().unwrap_or_default());
 
@@ -174,7 +183,7 @@ fn main() -> Result<(), clap::Error> {
                 Ok(mut cap) => {
                     apply_filter(&mut cap, &cli.bpf_expression, &mut cmd);
                     dump_strings(&mut cap, &cli.number, &mut resolver, &cli.block_print);
-                },
+                }
                 Err(err) => cmd.error(ErrorKind::Io, err).exit(),
             };
         } else {
