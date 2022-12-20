@@ -22,10 +22,10 @@ const VLAN: u16 = 0x8100;
 pub type Resolver = HashMap<IpAddr, String>;
 
 fn get_field(data: &[u8], offset: usize, bitlen: usize) -> Result<u128, &str> {
-    if bitlen % 8 != 0 {
-        return Err("Length must be positive multiple of 8");
-    } else if bitlen > 128 {
-        return Err("Length must be less than 128 bits");
+    assert!(bitlen % 8 == 0, "Length must be positive multiple of 8");
+    assert!(bitlen <= 128, "Length must be less than 128 bits");
+    if (data.len() - offset) < bitlen / 8 {
+        return Err("Data after offset is shorter than bitlen");
     }
     let mut addr: u128 = 0;
     for i in 0..(bitlen / 8) {
