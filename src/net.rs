@@ -2,6 +2,7 @@ use cfg_if::cfg_if;
 use colored::*;
 use pcap::Packet;
 use std::collections::HashMap;
+use std::default::Default;
 use std::fmt::Write;
 use std::net::IpAddr;
 use std::result::Result;
@@ -112,7 +113,7 @@ fn handle_unknown(
     Err("Unknown protocol".to_string())
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Default)]
 pub struct PacketSummary<'a> {
     pub l2_src: Option<u128>,
     pub l2_dst: Option<u128>,
@@ -128,18 +129,7 @@ pub struct PacketSummary<'a> {
 
 impl<'a> PacketSummary<'a> {
     pub fn new() -> Self {
-        Self {
-            l2_src: None,
-            l2_dst: None,
-            ethertype: None,
-            vlan_id: None,
-            l3_src: None,
-            l3_dst: None,
-            next_proto: None,
-            l4_sport: None,
-            l4_dport: None,
-            resolver: None,
-        }
+        Default::default()
     }
 
     pub fn from_packet(pkt: &Packet, resolver: Option<&'a mut HashMap<IpAddr, String>>) -> Self {
