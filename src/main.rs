@@ -44,7 +44,7 @@ struct Cli {
         long,
         value_parser,
         conflicts_with = "interface",
-        hide = true,
+        required= true,
         help = HELP_FILE,
     )]
     file: Option<String>,
@@ -54,7 +54,7 @@ struct Cli {
         long,
         value_parser,
         conflicts_with = "file",
-        hide = true,
+        required= true,
         help = HELP_INTERFACE,
     )]
     interface: Option<String>,
