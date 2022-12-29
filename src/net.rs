@@ -301,7 +301,7 @@ mod tests {
 
     use super::*;
 
-    const REF_PACKET: Packet = Packet {
+    const REF_V4_PACKET: Packet = Packet {
         header: &PacketHeader {
             ts: timeval {
                 tv_sec: 0,
@@ -331,42 +331,77 @@ mod tests {
         ],
     };
 
+    const REF_V6_PACKET: Packet = Packet {
+        header: &PacketHeader {
+            ts: timeval {
+                tv_sec: 0,
+                tv_usec: 0,
+            },
+            caplen: 97,
+            len: 97,
+        },
+        data: &[
+            0x0, 0x0, 0x0, 0x0, 0x0, 0x1, // dst
+            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, // src
+            0x81, 0x0, // 802.1q
+            0x0f, 0xff, // VLAN ID 4095
+            0x86, 0xdd, // TPID IPv6
+            0x60, 0x0, 0x0, 0x0, 0x0, 0x27, 0x6, 0x40, // default headers
+            0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
+            0x1, // src ::1
+            0x73, 0x57, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1,
+            0x23, // dst 7357::123
+            0x0, 0x50, // sport 80
+            0x14, 0xeb, // dport 5355
+            0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, // headers
+            0x50, 0x2, 0x20, 0x0, 0x42, 0x76, 0x0, 0x0, // headers
+            0x74, 0x65, 0x73, 0x74, 0x20, // test<space>
+            0x74, 0x65, 0x73, 0x74, 0x20, // test<space>
+            0x74, 0x65, 0x73, 0x74, 0x20, // test<space>
+            0x74, 0x65, 0x73, 0x74, // test
+        ],
+    };
+
     #[test]
     fn test_get_field() {
         let data = &[0x01, 0x23, 0x34, 0x0f, 0xff, 0x56];
         let expected = 4095;
+
         let result = get_field(data, 3, 16);
         assert!(result.is_ok());
-        assert_eq!(expected, result.unwrap());
+        assert_eq!(result.unwrap(), expected);
     }
 
     #[test]
     fn test_int_to_mac_str() {
         let expected = "00:00:00:00:00:01";
+
         let mut result = String::new();
         int_to_mac_str(&1u64, &mut result);
-        assert_eq!(expected, result);
+        assert_eq!(result, expected);
     }
 
     #[test]
     fn test_int_to_ipv6_str() {
         let expected = "0000:0000:0000:0000:0000:0000:0000:0001";
+
         let mut result = String::new();
         int_to_ipv6_str(&1u128, &mut result);
-        assert_eq!(expected, result);
+        assert_eq!(result, expected);
     }
 
     #[test]
     fn test_int_to_ipv4_str() {
         let expected = "0.0.0.1";
+
         let mut result = String::new();
         int_to_ipv4_str(&1u32, &mut result);
-        assert_eq!(expected, result);
+        assert_eq!(result, expected);
     }
 
     #[test]
-    fn test_from_packet() {
-        let pktsum = PacketSummary::from_packet(&REF_PACKET, None);
+    fn test_from_packet_v4() {
+        let pktsum = PacketSummary::from_packet(&REF_V4_PACKET, None);
 
         assert_eq!(pktsum.l2_dst.unwrap(), 1, "l2_dst");
         assert_eq!(pktsum.l2_src.unwrap(), 281474976710655, "l2_src");
@@ -377,5 +412,73 @@ mod tests {
         assert_eq!(pktsum.next_proto.unwrap(), 6, "next_proto");
         assert_eq!(pktsum.l4_sport.unwrap(), 80, "l4_sport");
         assert_eq!(pktsum.l4_dport.unwrap(), 5355, "l4_dport");
+    }
+
+    #[test]
+    fn test_from_packet_v6() {
+        let pktsum = PacketSummary::from_packet(&REF_V6_PACKET, None);
+
+        assert_eq!(pktsum.l2_dst.unwrap(), 1, "l2_dst");
+        assert_eq!(pktsum.l2_src.unwrap(), 281474976710655, "l2_src");
+        assert_eq!(pktsum.ethertype.unwrap(), 34525, "ethertype");
+        assert_eq!(pktsum.vlan_id.unwrap(), 4095, "vlan_id");
+        assert_eq!(pktsum.l3_src.unwrap(), 1, "l3_src");
+        assert_eq!(
+            pktsum.l3_dst.unwrap(),
+            153312949341957855387619965112881774883,
+            "l3_dst"
+        );
+        assert_eq!(pktsum.next_proto.unwrap(), 6, "next_proto");
+        assert_eq!(pktsum.l4_sport.unwrap(), 80, "l4_sport");
+        assert_eq!(pktsum.l4_dport.unwrap(), 5355, "l4_dport");
+    }
+
+    #[test]
+    fn test_handle_eth() {
+        let mut pktsum = PacketSummary::new();
+        let expected = 18;
+
+        let result = handle_eth(&REF_V4_PACKET, 0, &mut pktsum);
+        assert_eq!(result.unwrap(), expected, "offset");
+        assert_eq!(pktsum.l2_dst.unwrap(), 1, "l2_dst");
+        assert_eq!(pktsum.l2_src.unwrap(), 281474976710655, "l2_src");
+        assert_eq!(pktsum.ethertype.unwrap(), 2048, "ethertype");
+        assert_eq!(pktsum.vlan_id.unwrap(), 4095, "vlan_id");
+    }
+
+    #[test]
+    fn test_handle_ipv4() {
+        let mut pktsum = PacketSummary::new();
+        let expected = 38;
+
+        let result = handle_ipv4(&REF_V4_PACKET, 18, &mut pktsum);
+        assert_eq!(result.unwrap(), expected, "offset");
+        assert_eq!(pktsum.l3_src.unwrap(), 2130706433, "l3_src");
+        assert_eq!(pktsum.l3_dst.unwrap(), 3232235777, "l3_dst");
+        assert_eq!(pktsum.next_proto.unwrap(), 6, "next_proto");
+    }
+
+    #[test]
+    fn test_handle_ipv6() {
+        let mut pktsum = PacketSummary::new();
+        let expected = 58;
+
+        let result = handle_ipv6(&REF_V6_PACKET, 18, &mut pktsum);
+        assert_eq!(result.unwrap(), expected, "offset");
+        assert_eq!(pktsum.l3_src.unwrap(), 1, "l3_src");
+        assert_eq!(
+            pktsum.l3_dst.unwrap(),
+            153312949341957855387619965112881774883,
+            "l3_dst"
+        );
+        assert_eq!(pktsum.next_proto.unwrap(), 6, "next_proto");
+    }
+
+    #[test]
+    fn test_handle_unknown() {
+        let mut pktsum = PacketSummary::new();
+
+        let result = handle_unknown(&REF_V4_PACKET, 0, &mut pktsum);
+        assert!(result.is_err());
     }
 }
