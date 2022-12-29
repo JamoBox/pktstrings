@@ -293,3 +293,88 @@ impl<'a> PacketSummary<'a> {
         out
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use libc::timeval;
+    use pcap::{Packet, PacketHeader};
+
+    use super::*;
+
+    const REF_PACKET: Packet = Packet {
+        header: &PacketHeader {
+            ts: timeval { tv_sec: 0, tv_usec: 0 },
+            caplen: 77,
+            len: 77,
+        },
+        data: &[
+            0x0, 0x0, 0x0, 0x0, 0x0, 0x1,  // dst
+            0xff, 0xff, 0xff, 0xff, 0xff, 0xff,  // src
+            0x81, 0x0, // 802.1q
+            0x0f, 0xff, // VLAN ID 4095
+            0x8, 0x0,  // TPID IPv4
+            0x45, 0x0, 0x0, 0x3b, 0x0, 0x1,  // default headers
+            0x0, 0x0, 0x40, 0x6, 0x3a, 0x12,  // headers w/ TCP proto
+            0x7f, 0x0, 0x0, 0x1,  // src 127.0.0.1
+            0xc0, 0xa8, 0x1, 0x1, // dst 192.168.1.1
+            0x0, 0x50,  // sport 80
+            0x14, 0xeb, // dport 5355
+            0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,  // headers
+            0x50, 0x2, 0x20, 0x0, 0x76, 0x46, 0x0, 0x0, // headers
+            0x74, 0x65, 0x73, 0x74, 0x20, // test test test test
+            0x74, 0x65, 0x73, 0x74, 0x20,
+            0x74, 0x65, 0x73, 0x74, 0x20,
+            0x74, 0x65, 0x73, 0x74,
+        ],
+    };
+
+    #[test]
+    fn test_get_field() {
+        let data = &[0x01, 0x23, 0x34, 0x0f, 0xff, 0x56];
+        let expected = 4095;
+        let result = get_field(data, 3, 16);
+        assert!(result.is_ok());
+        assert_eq!(expected, result.unwrap());
+    }
+
+    #[test]
+    fn test_int_to_mac_str() {
+        let expected = "00:00:00:00:00:01";
+        let mut result = String::new();
+        int_to_mac_str(&1u64, &mut result);
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn test_int_to_ipv6_str() {
+        let expected = "0000:0000:0000:0000:0000:0000:0000:0001";
+        let mut result = String::new();
+        int_to_ipv6_str(&1u128, &mut result);
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn test_int_to_ipv4_str() {
+        let expected = "0.0.0.1";
+        let mut result = String::new();
+        int_to_ipv4_str(&1u32, &mut result);
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn test_from_packet() {
+
+        let pktsum = PacketSummary::from_packet(&REF_PACKET, None);
+
+        assert_eq!(pktsum.l2_dst.unwrap(), 1, "l2_dst");
+        assert_eq!(pktsum.l2_src.unwrap(), 281474976710655, "l2_src");
+        assert_eq!(pktsum.ethertype.unwrap(), 2048, "ethertype");
+        assert_eq!(pktsum.vlan_id.unwrap(), 4095, "vlan_id");
+        assert_eq!(pktsum.l3_src.unwrap(), 2130706433, "l3_src");
+        assert_eq!(pktsum.l3_dst.unwrap(), 3232235777, "l3_dst");
+        assert_eq!(pktsum.next_proto.unwrap(), 6, "next_proto");
+        assert_eq!(pktsum.l4_sport.unwrap(), 80, "l4_sport");
+        assert_eq!(pktsum.l4_dport.unwrap(), 5355, "l4_dport");
+    }
+}
