@@ -1,5 +1,8 @@
 # pktstrings
 
+![build status](https://github.com/JamoBox/pktstrings/actions/workflows/ci.yml/badge.svg)
+![lint status](https://github.com/JamoBox/pktstrings/actions/workflows/rust-clippy.yml/badge.svg)
+
 Ever ran `strings` on a PCAP and found something interesting, but left frustrated you have no context of which packet it occurred in?
 
 Pktstrings is like Unix `strings` command, but packet-aware.
