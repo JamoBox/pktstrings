@@ -21,7 +21,7 @@ const HELP_INTERFACE: &str = "Network device to read packets from";
 const HELP_RESOLVE_DNS: &str = "Try to resolve addresses (Warning: SLOW!)";
 
 #[derive(Parser, Debug)]
-#[clap(author, version, about, long_about, arg_required_else_help = true, color = ColorChoice::Always)]
+#[clap(author, version, about, long_about, color = ColorChoice::Always)]
 struct Cli {
     #[clap(short, long = "bytes", value_parser, default_value_t = 7, help = HELP_NUMBER)]
     number: u32,
@@ -43,8 +43,6 @@ struct Cli {
         short,
         long,
         value_parser,
-        conflicts_with = "interface",
-        required= true,
         help = HELP_FILE,
     )]
     file: Option<String>,
@@ -53,8 +51,6 @@ struct Cli {
         short,
         long,
         value_parser,
-        conflicts_with = "file",
-        required= true,
         help = HELP_INTERFACE,
     )]
     interface: Option<String>,
@@ -125,17 +121,35 @@ fn dump_strings<T: Activated>(
     }
 }
 
+fn list_devices() {
+    let default_dev = Device::lookup().ok().flatten();
+    let devices: Vec<String> = Device::list()
+        .unwrap_or_default()
+        .iter()
+        .map(|x| x.name.clone())
+        .collect();
+    for dev in devices.iter() {
+        if let Some(default_dev) = &default_dev {
+            if *dev == *default_dev.name {
+                let bold_dev = dev.to_string().bold();
+                print!("{bold_dev}");
+            } else {
+                print!("{dev}");
+            }
+        } else {
+            print!("{dev}");
+        }
+        print!("\t");
+    }
+    println!();
+}
+
 fn main() -> Result<(), clap::Error> {
     let cli = Cli::parse();
     let mut cmd = Cli::command();
 
     if cli.list_devices {
-        let devices: Vec<String> = Device::list()
-            .unwrap_or_default()
-            .iter()
-            .map(|x| x.name.clone())
-            .collect();
-        println!("{}", devices.join("\t"));
+        list_devices();
         return Ok(());
     }
 
@@ -190,6 +204,21 @@ fn main() -> Result<(), clap::Error> {
             let err = format!("device not found: {intf}");
             cmd.error(ErrorKind::InvalidValue, err).exit();
         }
+    } else {
+        let capture_dev = match Device::lookup() {
+            Ok(maybe_cap) => match maybe_cap {
+                Some(cap) => cap,
+                None => cmd.error(ErrorKind::Io, "no devices found").exit(),
+            },
+            Err(err) => cmd.error(ErrorKind::Io, err).exit(),
+        };
+        match capture_dev.open() {
+            Ok(mut cap) => {
+                apply_filter(&mut cap, &cli.bpf_expression, &mut cmd);
+                dump_strings(&mut cap, &cli.number, &mut resolver, &cli.block_print);
+            }
+            Err(err) => cmd.error(ErrorKind::Io, err).exit(),
+        };
     }
 
     Ok(())
