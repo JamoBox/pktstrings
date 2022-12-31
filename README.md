@@ -2,6 +2,8 @@
 
 ![build status](https://github.com/JamoBox/pktstrings/actions/workflows/ci.yml/badge.svg)
 ![lint status](https://github.com/JamoBox/pktstrings/actions/workflows/rust-clippy.yml/badge.svg)
+![crate license](https://img.shields.io/crates/l/pktstrings)
+![crate version](https://img.shields.io/crates/v/pktstrings)
 
 Ever ran `strings` on a PCAP and found something interesting, but left frustrated you have no context of which packet it occurred in?
 
