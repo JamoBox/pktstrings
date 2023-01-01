@@ -5,9 +5,6 @@ use colored::*;
 use pcap::{Activated, Capture, Device};
 use std::path::Path;
 
-#[cfg(feature = "resolve")]
-use std::collections::HashMap;
-
 mod net;
 
 const HELP_NUMBER: &str = "Number of printable characters to display";
@@ -157,7 +154,7 @@ fn main() -> Result<(), clap::Error> {
     cfg_if! {
         if #[cfg(feature = "resolve")] {
             if cli.resolve_dns {
-                resolver = Some(Box::new(HashMap::new()));
+                resolver = Some(Box::default());
             } else {
                 resolver = None;
             }
