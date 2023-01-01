@@ -206,8 +206,8 @@ fn main() -> Result<(), clap::Error> {
         }
     } else {
         let capture_dev = match Device::lookup() {
-            Ok(maybe_cap) => match maybe_cap {
-                Some(cap) => cap,
+            Ok(maybe_dev) => match maybe_dev {
+                Some(dev) => dev,
                 None => cmd.error(ErrorKind::Io, "no devices found").exit(),
             },
             Err(err) => cmd.error(ErrorKind::Io, err).exit(),
