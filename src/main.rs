@@ -190,7 +190,7 @@ fn main() -> Result<(), clap::Error> {
 
         if let Some(dev) = devices.iter().find(|&x| x.name == intf) {
             let capture_dev = match Capture::from_device(dev.clone()) {
-                Ok(cap) => cap,
+                Ok(cap) => cap.immediate_mode(true),
                 Err(err) => cmd.error(ErrorKind::Io, err).exit(),
             };
             match capture_dev.open() {
@@ -212,10 +212,15 @@ fn main() -> Result<(), clap::Error> {
             },
             Err(err) => cmd.error(ErrorKind::Io, err).exit(),
         };
-        match capture_dev.open() {
-            Ok(mut cap) => {
-                apply_filter(&mut cap, &cli.bpf_expression, &mut cmd);
-                dump_strings(&mut cap, &cli.number, &mut resolver, &cli.block_print);
+        match Capture::from_device(capture_dev) {
+            Ok(inactive_cap) => {
+                match inactive_cap.immediate_mode(true).open() {
+                    Ok(mut cap) => {
+                        apply_filter(&mut cap, &cli.bpf_expression, &mut cmd);
+                        dump_strings(&mut cap, &cli.number, &mut resolver, &cli.block_print);
+                    },
+                    Err(err) => cmd.error(ErrorKind::Io, err).exit(),
+                }
             }
             Err(err) => cmd.error(ErrorKind::Io, err).exit(),
         };
