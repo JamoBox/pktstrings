@@ -1,6 +1,6 @@
 [package]
 name = "pktstrings"
-version = "1.0.4"
+version = "1.0.5"
 edition = "2021"
 rust-version = "1.60"
 authors = ["Pete Wicken <petewicken@gmail.com>"]
@@ -9,11 +9,11 @@ readme = "README.md"
 homepage = "https://github.com/JamoBox/pktstrings"
 repository = "https://github.com/JamoBox/pktstrings"
 license = "MIT"
-keywords = ["packet-analyzer", "network-monitoring", "network-analysis", "ctf-tools"]
+keywords = ["packet-analyzer", "pcap", "sniffing", "packet"]
 categories = ["command-line-utilities", "network-programming"]
 
 [dependencies]
-clap = {version = "4", features = ["derive", "cargo"]}
+clap = {version = "4", features = ["derive"]}
 pcap = "0"
 colored = "2"
 dns-lookup = {version = "1", optional = true}
@@ -23,6 +23,9 @@ libc = "0"
 [features]
 bland = ["colored/no-color"]
 resolve = ["dns-lookup"]
+
+[profile.dev]
+split-debuginfo = "packed"
 
 [profile.release]
 lto = true
