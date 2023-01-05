@@ -73,7 +73,9 @@ fn handle_eth(pkt: &Packet, offset: usize, pktsum: &mut PacketSummary) -> Result
 
     pktsum.ethertype = match ethertype {
         Some(VLAN) => {
-            pktsum.vlan_id = get_field(pkt.data, offset + 14, 16).map(|x| x as u16 & 0xfff).ok();
+            pktsum.vlan_id = get_field(pkt.data, offset + 14, 16)
+                .map(|x| x as u16 & 0xfff)
+                .ok();
             vlan_padding = 4;
 
             get_field(pkt.data, offset + 16, 16).map(|x| x as u16).ok()
