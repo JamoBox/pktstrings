@@ -7,18 +7,10 @@ use std::fmt::Write;
 use std::net::IpAddr;
 use std::result::Result;
 
+use crate::proto::*;
+
 #[cfg(feature = "resolve")]
 use dns_lookup::lookup_addr;
-
-// IP next protos with port bytes all in same place :)
-const TCP: u8 = 6;
-const UDP: u8 = 17;
-const DCCP: u8 = 33;
-const SCTP: u8 = 132;
-
-const IPV4: u16 = 0x0800;
-const IPV6: u16 = 0x86dd;
-const VLAN: u16 = 0x8100;
 
 pub type Resolver = HashMap<IpAddr, String>;
 
@@ -73,7 +65,9 @@ fn handle_eth(pkt: &Packet, offset: usize, pktsum: &mut PacketSummary) -> Result
 
     pktsum.ethertype = match ethertype {
         Some(VLAN) => {
-            pktsum.vlan_id = get_field(pkt.data, offset + 14, 16).map(|x| x as u16 & 0xfff).ok();
+            pktsum.vlan_id = get_field(pkt.data, offset + 14, 16)
+                .map(|x| x as u16 & 0xfff)
+                .ok();
             vlan_padding = 4;
 
             get_field(pkt.data, offset + 16, 16).map(|x| x as u16).ok()
@@ -97,12 +91,48 @@ fn handle_ipv4(pkt: &Packet, offset: usize, pktsum: &mut PacketSummary) -> Resul
 }
 
 fn handle_ipv6(pkt: &Packet, offset: usize, pktsum: &mut PacketSummary) -> Result<usize, String> {
-    pktsum.next_proto = Some(pkt.data[offset + 6]);
+    let mut next_offset = offset + 40;
+    let mut next_proto = pkt.data[offset + 6];
+
     pktsum.l3_src = get_field(pkt, offset + 8, 128).ok();
     pktsum.l3_dst = get_field(pkt, offset + 24, 128).ok();
 
-    // TODO: parse headers
-    Ok(offset + 40)
+    // walk until we hit bottom of IPv6 header stack
+    let mut bos = false;
+    while !bos {
+        match next_proto {
+            HOPOPT | IPV6_ROUTE | IPV6_OPTS => {
+                next_proto = pkt[next_offset];
+                next_offset += 8 + (pkt[next_offset + 1] * 8) as usize;
+            }
+            IPV6_FRAG => {
+                let frag = get_field(pkt, next_offset + 2, 16)
+                    .map(|x| x as u16 & 0xff8)
+                    .unwrap();
+                next_proto = pkt[next_offset];
+                next_offset += 8;
+
+                // if we aren't on the first fragment then pass an error up
+                // to prevent the protocol walker from continuing to try and parse
+                // whatever data that follows as an L4 header.
+                if frag != 0 {
+                    pktsum.next_proto = Some(next_proto);
+                    return Err("IPv6 Frag, halt parsing".to_string());
+                }
+                bos = true; // prevent re-looping as we will always be BoS here
+            }
+            AH => {
+                return Err("IPv6 Auth Hdr, halt parsing".to_string());
+            }
+            IPV6_NONXT => {
+                return Err("IPv6 No Next Header, halt parsing".to_string());
+            }
+            _ => bos = true,
+        };
+    }
+
+    pktsum.next_proto = Some(next_proto);
+    Ok(next_offset)
 }
 
 fn handle_unknown(
@@ -117,11 +147,11 @@ fn handle_unknown(
 pub struct PacketSummary<'a> {
     pub l2_src: Option<u128>,
     pub l2_dst: Option<u128>,
-    pub ethertype: Option<u16>,
+    pub ethertype: Option<Ethertype>,
     pub vlan_id: Option<u16>,
     pub l3_src: Option<u128>,
     pub l3_dst: Option<u128>,
-    pub next_proto: Option<u8>,
+    pub next_proto: Option<NextProto>,
     pub l4_sport: Option<u16>,
     pub l4_dport: Option<u16>,
     pub resolver: Option<&'a mut HashMap<IpAddr, String>>,
@@ -183,16 +213,10 @@ impl<'a> PacketSummary<'a> {
             None => String::new(),
         };
 
-        let next_proto = match self.next_proto {
-            Some(1) => "ICMP".to_string(),
-            Some(TCP) => "TCP".to_string(),
-            Some(UDP) => "UDP".to_string(),
-            Some(DCCP) => "DCCP".to_string(),
-            Some(58) => "ICMPv6".to_string(),
-            Some(SCTP) => "SCTP".to_string(),
-            Some(proto) => proto.to_string(),
-            _ => "-".to_string(),
-        };
+        let mut next_proto = "-".to_string();
+        if let Some(np) = self.next_proto {
+            next_proto = np.resolve();
+        }
 
         let is_ip = match self.ethertype {
             Some(IPV6) => {
@@ -269,15 +293,14 @@ impl<'a> PacketSummary<'a> {
         } else {
             let mut l2_src = String::new();
             let mut l2_dst = String::new();
-            let mut ethertype = String::new();
 
             int_to_mac_str(&(self.l2_src.unwrap_or(0) as u64), &mut l2_src);
             int_to_mac_str(&(self.l2_dst.unwrap_or(0) as u64), &mut l2_dst);
 
-            let _ = match self.ethertype {
-                Some(et) => write!(ethertype, "{:04x}", et).ok(),
-                _ => write!(ethertype, "----").ok(),
-            };
+            let mut ethertype = "----".to_string();
+            if let Some(et) = self.ethertype {
+                ethertype = et.resolve();
+            }
 
             out.push_str(
                 format!(
@@ -341,16 +364,38 @@ mod tests {
             len: 97,
         },
         data: &[
+            /* Ethernet + Dot1Q */
             0x0, 0x0, 0x0, 0x0, 0x0, 0x1, // dst
             0xff, 0xff, 0xff, 0xff, 0xff, 0xff, // src
             0x81, 0x0, // 802.1q
             0x5f, 0xff, // VLAN ID 4095
             0x86, 0xdd, // TPID IPv6
-            0x60, 0x0, 0x0, 0x0, 0x0, 0x27, 0x6, 0x40, // default headers
+            /* IPv6 */
+            0x60, 0x0, 0x0, 0x0, 0x0, 0x27, 0x0, 0x40, // defaults + Hop-By-Hop Next Header
             0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
             0x1, // src ::1
             0x73, 0x57, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1,
             0x23, // dst 7357::123
+            /* Hop-By-Hop */
+            0x3c, // Next Header
+            0x01, // Hdr Ext Len
+            b'A', b'A', b'A', b'A', b'A', b'A', b'A', b'A', b'A', b'A', b'A', b'A', b'A', b'A',
+            /* Destination Options */
+            0x2b, // Next Header
+            0x01, // Hdr Ext Len
+            b'B', b'B', b'B', b'B', b'B', b'B', b'B', b'B', b'B', b'B', b'B', b'B', b'B', b'B',
+            /* Routing */
+            0x2c, // Next Header
+            0x01, // Hdr Ext Len
+            0x04, // Routing Type
+            0x02, // Segments Left
+            b'C', b'C', b'C', b'C', b'C', b'C', b'C', b'C', b'C', b'C', b'C', b'C',
+            /* Fragment */
+            0x6,  // Next Header
+            0x00, // Reserved
+            0x00, 0x00, // Fragment Offset
+            0x00, 0x00, 0x04, 0xd2, // Identification
+            /* TCP */
             0x0, 0x50, // sport 80
             0x14, 0xeb, // dport 5355
             0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, // headers
@@ -461,7 +506,7 @@ mod tests {
     #[test]
     fn test_handle_ipv6() {
         let mut pktsum = PacketSummary::new();
-        let expected = 58;
+        let expected = 114;
 
         let result = handle_ipv6(&REF_V6_PACKET, 18, &mut pktsum);
         assert_eq!(result.unwrap(), expected, "offset");

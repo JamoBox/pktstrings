@@ -45,8 +45,7 @@ To install from cloned source:
 Default install location is `~/.cargo/bin/pktstrings`.
 Run pktstrings with `-h` for help and available options.
 
-## TODO:
-- More optimisations
-- Possibly PCAPNG
-- Other encodings
-- Better protocol support (e.g. IPv6 header parsing?)
+## TODO (maybe):
+- Other string encodings
+- Support more protocols
+- Full PCAPNG support
