@@ -23,21 +23,32 @@ impl ProtoResolver for Ethertype {
 /* IP Next Proto/Header */
 pub type NextProto = u8;
 
+pub const HOPOPT: NextProto = 0;
 pub const ICMP: NextProto = 1;
 pub const TCP: NextProto = 6;
 pub const UDP: NextProto = 17;
 pub const DCCP: NextProto = 33;
-pub const ICMPV6: NextProto = 58;
+pub const IPV6_ROUTE: NextProto = 43;
+pub const IPV6_FRAG: NextProto = 44;
+pub const AH: NextProto = 51;
+pub const IPV6_ICMP: NextProto = 58;
+pub const IPV6_NONXT: NextProto = 59;
+pub const IPV6_OPTS: NextProto = 60;
 pub const SCTP: NextProto = 132;
 
 impl ProtoResolver for NextProto {
     fn resolve(&self) -> String {
         match *self {
+            HOPOPT => "Hop-by-Hop".to_string(),
             ICMP => "ICMP".to_string(),
             TCP => "TCP".to_string(),
             UDP => "UDP".to_string(),
             DCCP => "DCCP".to_string(),
-            ICMPV6 => "ICMPv6".to_string(),
+            IPV6_ROUTE => "Routing".to_string(),
+            IPV6_FRAG => "Fragmented".to_string(),
+            IPV6_ICMP => "ICMPv6".to_string(),
+            IPV6_NONXT => "No Next Hdr".to_string(),
+            IPV6_OPTS => "Dst Opts".to_string(),
             SCTP => "SCTP".to_string(),
             _ => self.to_string(),
         }

@@ -101,11 +101,11 @@ fn handle_ipv6(pkt: &Packet, offset: usize, pktsum: &mut PacketSummary) -> Resul
     let mut bos = false;
     while !bos {
         match next_proto {
-            0 | 43 | 60 => {
+            HOPOPT | IPV6_ROUTE | IPV6_OPTS => {
                 next_proto = pkt[next_offset];
                 next_offset += 8 + (pkt[next_offset + 1] * 8) as usize;
             }
-            44 => {
+            IPV6_FRAG => {
                 let frag = get_field(pkt, next_offset + 2, 16)
                     .map(|x| x as u16 & 0xff8)
                     .unwrap();
@@ -120,6 +120,12 @@ fn handle_ipv6(pkt: &Packet, offset: usize, pktsum: &mut PacketSummary) -> Resul
                     return Err("IPv6 Frag, halt parsing".to_string());
                 }
                 bos = true; // prevent re-looping as we will always be BoS here
+            }
+            AH => {
+                return Err("IPv6 Auth Hdr, halt parsing".to_string());
+            }
+            IPV6_NONXT => {
+                return Err("IPv6 No Next Header, halt parsing".to_string());
             }
             _ => bos = true,
         };
