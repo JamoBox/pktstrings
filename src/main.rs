@@ -6,6 +6,7 @@ use pcap::{Activated, Capture, Device};
 use std::path::Path;
 
 mod net;
+mod proto;
 
 const HELP_NUMBER: &str = "Number of printable characters to display";
 const HELP_BLOCK_PRINT: &str = "Print string blocks without packet info on each line";

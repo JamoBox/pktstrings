@@ -7,18 +7,10 @@ use std::fmt::Write;
 use std::net::IpAddr;
 use std::result::Result;
 
+use crate::proto::*;
+
 #[cfg(feature = "resolve")]
 use dns_lookup::lookup_addr;
-
-// IP next protos with port bytes all in same place :)
-const TCP: u8 = 6;
-const UDP: u8 = 17;
-const DCCP: u8 = 33;
-const SCTP: u8 = 132;
-
-const IPV4: u16 = 0x0800;
-const IPV6: u16 = 0x86dd;
-const VLAN: u16 = 0x8100;
 
 pub type Resolver = HashMap<IpAddr, String>;
 
@@ -149,11 +141,11 @@ fn handle_unknown(
 pub struct PacketSummary<'a> {
     pub l2_src: Option<u128>,
     pub l2_dst: Option<u128>,
-    pub ethertype: Option<u16>,
+    pub ethertype: Option<Ethertype>,
     pub vlan_id: Option<u16>,
     pub l3_src: Option<u128>,
     pub l3_dst: Option<u128>,
-    pub next_proto: Option<u8>,
+    pub next_proto: Option<NextProto>,
     pub l4_sport: Option<u16>,
     pub l4_dport: Option<u16>,
     pub resolver: Option<&'a mut HashMap<IpAddr, String>>,
@@ -215,16 +207,10 @@ impl<'a> PacketSummary<'a> {
             None => String::new(),
         };
 
-        let next_proto = match self.next_proto {
-            Some(1) => "ICMP".to_string(),
-            Some(TCP) => "TCP".to_string(),
-            Some(UDP) => "UDP".to_string(),
-            Some(DCCP) => "DCCP".to_string(),
-            Some(58) => "ICMPv6".to_string(),
-            Some(SCTP) => "SCTP".to_string(),
-            Some(proto) => proto.to_string(),
-            _ => "-".to_string(),
-        };
+        let mut next_proto = "-".to_string();
+        if let Some(np) = self.next_proto {
+            next_proto = np.resolve();
+        }
 
         let is_ip = match self.ethertype {
             Some(IPV6) => {
@@ -301,15 +287,14 @@ impl<'a> PacketSummary<'a> {
         } else {
             let mut l2_src = String::new();
             let mut l2_dst = String::new();
-            let mut ethertype = String::new();
 
             int_to_mac_str(&(self.l2_src.unwrap_or(0) as u64), &mut l2_src);
             int_to_mac_str(&(self.l2_dst.unwrap_or(0) as u64), &mut l2_dst);
 
-            let _ = match self.ethertype {
-                Some(et) => write!(ethertype, "{:04x}", et).ok(),
-                _ => write!(ethertype, "----").ok(),
-            };
+            let mut ethertype = "----".to_string();
+            if let Some(et) = self.ethertype {
+                ethertype = et.resolve();
+            }
 
             out.push_str(
                 format!(
