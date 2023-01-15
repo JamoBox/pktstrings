@@ -76,6 +76,7 @@ fn dump_strings<T: Activated>(
         let mut printed = false;
         let mut chars = 0;
         let mut partial = String::new();
+        let mut pktsum: Option<net::PacketSummary> = None;
         for byte in pkt.data {
             let c = *byte as char;
             // TODO: other encodings
@@ -86,20 +87,23 @@ fn dump_strings<T: Activated>(
                 } else {
                     partial.push(c);
                     if chars == *len {
-                        let mut pktsum: net::PacketSummary;
-                        if let Some(ref mut r) = resolver {
-                            pktsum = net::PacketSummary::from_packet(&pkt, Some(r));
-                        } else {
-                            pktsum = net::PacketSummary::from_packet(&pkt, None);
+                        if pktsum.is_none() {
+                            if let Some(ref mut r) = resolver {
+                                pktsum = Some(net::PacketSummary::from_packet(&pkt, Some(r)));
+                            } else {
+                                pktsum = Some(net::PacketSummary::from_packet(&pkt, None));
+                            }
                         }
 
                         let idx = pkt_count.to_string().blue();
                         if !printed || !*block_print {
-                            let pkt_str = pktsum.formatted();
-                            print!("[{idx}]{pkt_str}: ");
-                            printed = true;
-                            if *block_print {
-                                println!();
+                            if let Some(ref mut pktsum) = pktsum {
+                                let pkt_str = pktsum.formatted();
+                                print!("[{idx}]{pkt_str}: ");
+                                printed = true;
+                                if *block_print {
+                                    println!();
+                                }
                             }
                         }
                         print!("{partial}");
