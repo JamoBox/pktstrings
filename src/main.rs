@@ -3,14 +3,17 @@ use clap::error::ErrorKind;
 use clap::{ColorChoice, CommandFactory, Parser};
 use colored::*;
 use pcap::{Activated, Capture, Device};
+use regex::bytes::Regex;
 use std::path::Path;
+use std::vec::Vec;
 
 mod net;
 mod proto;
 
 const HELP_NUMBER: &str = "Number of printable characters to display";
 const HELP_BLOCK_PRINT: &str = "Print string blocks without packet info on each line";
-const HELP_EXPRESSION: &str = "BPF expression to filter packets with";
+const HELP_BPF_EXPRESSION: &str = "BPF expression to filter packets with";
+const HELP_RGX_EXPRESSION: &str = "Regular expression to match strings against";
 const HELP_LIST_DEVICES: &str = "List available network devices to read packets from";
 const HELP_FILE: &str = "PCAP format input file to read packets from";
 const HELP_INTERFACE: &str = "Network device to read packets from";
@@ -22,12 +25,12 @@ const HELP_RESOLVE_DNS: &str = "Try to resolve addresses (Warning: SLOW!)";
 #[clap(author, version, about, long_about, color = ColorChoice::Always)]
 struct Cli {
     #[clap(short, long = "bytes", value_parser, default_value_t = 7, help = HELP_NUMBER)]
-    number: u32,
+    number: usize,
 
     #[clap(short, long, value_parser, default_value_t = false, help = HELP_BLOCK_PRINT)]
     block_print: bool,
 
-    #[clap(short = 'e', long, value_parser, help = HELP_EXPRESSION)]
+    #[clap(short = 'e', long, value_parser, help = HELP_BPF_EXPRESSION)]
     bpf_expression: Option<String>,
 
     #[cfg(feature = "resolve")]
@@ -36,6 +39,9 @@ struct Cli {
 
     #[clap(short, long, value_parser, default_value_t = false, exclusive = true, help = HELP_LIST_DEVICES)]
     list_devices: bool,
+
+    #[clap(short, long, value_parser, help = HELP_RGX_EXPRESSION)]
+    search_expression: Option<String>,
 
     #[clap(
         short,
@@ -65,17 +71,26 @@ fn apply_filter<T: Activated>(cap: &mut Capture<T>, bpf: &Option<String>, cmd: &
 
 fn dump_strings<T: Activated>(
     cap: &mut Capture<T>,
-    len: &u32,
+    len: &usize,
     resolver: &mut Option<Box<net::Resolver>>,
     block_print: &bool,
+    regex: &Option<Regex>,
 ) {
     let mut pkt_count = 0;
 
     while let Ok(pkt) = cap.next_packet() {
         pkt_count += 1;
+
+        if let Some(regex) = regex {
+            if !regex.is_match(pkt.data) {
+                continue;
+            }
+        }
+
         let mut printed = false;
         let mut chars = 0;
         let mut partial = String::new();
+        let mut pktsum: Option<net::PacketSummary> = None;
         for byte in pkt.data {
             let c = *byte as char;
             // TODO: other encodings
@@ -86,20 +101,23 @@ fn dump_strings<T: Activated>(
                 } else {
                     partial.push(c);
                     if chars == *len {
-                        let mut pktsum: net::PacketSummary;
-                        if let Some(ref mut r) = resolver {
-                            pktsum = net::PacketSummary::from_packet(&pkt, Some(r));
-                        } else {
-                            pktsum = net::PacketSummary::from_packet(&pkt, None);
+                        if pktsum.is_none() {
+                            if let Some(ref mut r) = resolver {
+                                pktsum = Some(net::PacketSummary::from_packet(&pkt, Some(r)));
+                            } else {
+                                pktsum = Some(net::PacketSummary::from_packet(&pkt, None));
+                            }
                         }
 
                         let idx = pkt_count.to_string().blue();
                         if !printed || !*block_print {
-                            let pkt_str = pktsum.formatted();
-                            print!("[{idx}]{pkt_str}: ");
-                            printed = true;
-                            if *block_print {
-                                println!();
+                            if let Some(ref mut pktsum) = pktsum {
+                                let pkt_str = pktsum.formatted();
+                                print!("[{idx}]{pkt_str}: ");
+                                printed = true;
+                                if *block_print {
+                                    println!();
+                                }
                             }
                         }
                         print!("{partial}");
@@ -151,6 +169,14 @@ fn main() -> Result<(), clap::Error> {
         return Ok(());
     }
 
+    let mut regex: Option<Regex> = None;
+    if let Some(re) = cli.search_expression {
+        regex = match Regex::new(&re) {
+            Ok(expr) => Some(expr),
+            Err(err) => cmd.error(ErrorKind::InvalidValue, err).exit(),
+        }
+    }
+
     let mut resolver: Option<Box<net::Resolver>>;
     cfg_if! {
         if #[cfg(feature = "resolve")] {
@@ -176,7 +202,13 @@ fn main() -> Result<(), clap::Error> {
         match Capture::from_file(file) {
             Ok(mut cap) => {
                 apply_filter(&mut cap, &cli.bpf_expression, &mut cmd);
-                dump_strings(&mut cap, &cli.number, &mut resolver, &cli.block_print);
+                dump_strings(
+                    &mut cap,
+                    &cli.number,
+                    &mut resolver,
+                    &cli.block_print,
+                    &regex,
+                );
             }
             Err(err) => cmd.error(ErrorKind::InvalidValue, err).exit(),
         };
@@ -194,7 +226,13 @@ fn main() -> Result<(), clap::Error> {
             match capture_dev.open() {
                 Ok(mut cap) => {
                     apply_filter(&mut cap, &cli.bpf_expression, &mut cmd);
-                    dump_strings(&mut cap, &cli.number, &mut resolver, &cli.block_print);
+                    dump_strings(
+                        &mut cap,
+                        &cli.number,
+                        &mut resolver,
+                        &cli.block_print,
+                        &regex,
+                    );
                 }
                 Err(err) => cmd.error(ErrorKind::Io, err).exit(),
             };
@@ -214,7 +252,13 @@ fn main() -> Result<(), clap::Error> {
             Ok(inactive_cap) => match inactive_cap.immediate_mode(true).open() {
                 Ok(mut cap) => {
                     apply_filter(&mut cap, &cli.bpf_expression, &mut cmd);
-                    dump_strings(&mut cap, &cli.number, &mut resolver, &cli.block_print);
+                    dump_strings(
+                        &mut cap,
+                        &cli.number,
+                        &mut resolver,
+                        &cli.block_print,
+                        &regex,
+                    );
                 }
                 Err(err) => cmd.error(ErrorKind::Io, err).exit(),
             },
