@@ -14,6 +14,56 @@ use dns_lookup::lookup_addr;
 
 pub type Resolver = HashMap<IpAddr, String>;
 
+#[derive(Eq, PartialEq, Default)]
+pub struct PacketSummary<'a> {
+    pub l2_src: Option<u128>,
+    pub l2_dst: Option<u128>,
+    pub ethertype: Option<Ethertype>,
+    pub vlan_id: Option<u16>,
+    pub l3_src: Option<u128>,
+    pub l3_dst: Option<u128>,
+    pub next_proto: Option<NextProto>,
+    pub l4_sport: Option<u16>,
+    pub l4_dport: Option<u16>,
+    pub resolver: Option<&'a mut HashMap<IpAddr, String>>,
+}
+
+#[allow(clippy::upper_case_acronyms)]
+#[derive(Eq, PartialEq, Debug)]
+pub enum ProtoHandler {
+    COMPLETE, // special member
+    UNKNOWN,  // special member
+    ETH,
+    VLAN,
+    IPV4,
+    IPV6,
+    UDP,
+    TCP,
+    DCCP,
+    SCTP,
+}
+
+fn handle_protocol(
+    pkt: &Packet,
+    offset: usize,
+    pktsum: &mut PacketSummary,
+    proto: &ProtoHandler,
+) -> Result<(usize, ProtoHandler), String> {
+    let handler = match proto {
+        ProtoHandler::ETH => handle_eth,
+        ProtoHandler::VLAN => handle_vlan,
+        ProtoHandler::IPV4 => handle_ipv4,
+        ProtoHandler::IPV6 => handle_ipv6,
+        ProtoHandler::UDP => handle_ports,
+        ProtoHandler::TCP => handle_ports,
+        ProtoHandler::SCTP => handle_ports,
+        ProtoHandler::DCCP => handle_ports,
+        _ => handle_unknown,
+    };
+
+    handler(pkt, offset, pktsum)
+}
+
 fn get_field(data: &[u8], offset: usize, bitlen: usize) -> Result<u128, &str> {
     assert!(bitlen % 8 == 0, "Length must be positive multiple of 8");
     assert!(bitlen <= 128, "Length must be less than 128 bits");
@@ -56,41 +106,75 @@ fn int_to_ipv4_str(addr: &u32, formatted: &mut String) {
     }
 }
 
-fn handle_eth(pkt: &Packet, offset: usize, pktsum: &mut PacketSummary) -> Result<usize, String> {
-    pktsum.l2_dst = get_field(pkt, offset, 48).ok();
-    pktsum.l2_src = get_field(pkt, offset + 6, 48).ok();
-
-    let mut vlan_padding = 0;
-    let ethertype = get_field(pkt.data, offset + 12, 16).map(|x| x as u16).ok();
-
-    pktsum.ethertype = match ethertype {
-        Some(VLAN) => {
-            pktsum.vlan_id = get_field(pkt.data, offset + 14, 16)
-                .map(|x| x as u16 & 0xfff)
-                .ok();
-            vlan_padding = 4;
-
-            get_field(pkt.data, offset + 16, 16).map(|x| x as u16).ok()
-        }
-        _ => ethertype,
-    };
-
-    Ok(offset + 14 + vlan_padding)
+fn get_ethertype_handler(ethertype: &Option<Ethertype>) -> ProtoHandler {
+    match ethertype {
+        Some(VLAN) => ProtoHandler::VLAN,
+        Some(IPV4) => ProtoHandler::IPV4,
+        Some(IPV6) => ProtoHandler::IPV6,
+        _ => ProtoHandler::UNKNOWN,
+    }
 }
 
-fn handle_ipv4(pkt: &Packet, offset: usize, pktsum: &mut PacketSummary) -> Result<usize, String> {
-    let ihl: u8 = (pkt.data[offset] & 0xf) * 4;
+fn get_nextproto_handler(next_proto: &Option<NextProto>) -> ProtoHandler {
+    match next_proto {
+        Some(TCP) => ProtoHandler::TCP,
+        Some(UDP) => ProtoHandler::UDP,
+        Some(DCCP) => ProtoHandler::DCCP,
+        Some(SCTP) => ProtoHandler::SCTP,
+        _ => ProtoHandler::UNKNOWN,
+    }
+}
 
-    let next_offset: usize = offset + ihl as usize;
+fn handle_eth(
+    pkt: &Packet,
+    offset: usize,
+    pktsum: &mut PacketSummary,
+) -> Result<(usize, ProtoHandler), String> {
+    pktsum.l2_dst = get_field(pkt, offset, 48).ok();
+    pktsum.l2_src = get_field(pkt, offset + 6, 48).ok();
+    pktsum.ethertype = get_field(pkt.data, offset + 12, 16).map(|x| x as u16).ok();
+
+    let next_proto_hdl = get_ethertype_handler(&pktsum.ethertype);
+
+    Ok((offset + 14, next_proto_hdl))
+}
+
+fn handle_vlan(
+    pkt: &Packet,
+    offset: usize,
+    pktsum: &mut PacketSummary,
+) -> Result<(usize, ProtoHandler), String> {
+    pktsum.vlan_id = get_field(pkt.data, offset, 16)
+        .map(|x| x as u16 & 0xfff)
+        .ok();
+    pktsum.ethertype = get_field(pkt.data, offset + 2, 16).map(|x| x as u16).ok();
+
+    let next_proto_hdl = get_ethertype_handler(&pktsum.ethertype);
+
+    Ok((offset + 4, next_proto_hdl))
+}
+
+fn handle_ipv4(
+    pkt: &Packet,
+    offset: usize,
+    pktsum: &mut PacketSummary,
+) -> Result<(usize, ProtoHandler), String> {
+    let ihl = ((pkt.data[offset] & 0xf) * 4) as usize;
 
     pktsum.next_proto = Some(pkt.data[offset + 9]);
     pktsum.l3_src = get_field(pkt, offset + 12, 32).ok();
     pktsum.l3_dst = get_field(pkt, offset + 16, 32).ok();
 
-    Ok(next_offset)
+    let next_proto_hdl = get_nextproto_handler(&pktsum.next_proto);
+
+    Ok((offset + ihl, next_proto_hdl))
 }
 
-fn handle_ipv6(pkt: &Packet, offset: usize, pktsum: &mut PacketSummary) -> Result<usize, String> {
+fn handle_ipv6(
+    pkt: &Packet,
+    offset: usize,
+    pktsum: &mut PacketSummary,
+) -> Result<(usize, ProtoHandler), String> {
     let mut next_offset = offset + 40;
     let mut next_proto = pkt.data[offset + 6];
 
@@ -116,45 +200,52 @@ fn handle_ipv6(pkt: &Packet, offset: usize, pktsum: &mut PacketSummary) -> Resul
                 // to prevent the protocol walker from continuing to try and parse
                 // whatever data that follows as an L4 header.
                 if frag != 0 {
+                    // IPv6 Frag, halt parsing
                     pktsum.next_proto = Some(next_proto);
-                    return Err("IPv6 Frag, halt parsing".to_string());
+                    return Ok((next_offset, ProtoHandler::COMPLETE));
                 }
                 bos = true; // prevent re-looping as we will always be BoS here
             }
             AH => {
-                return Err("IPv6 Auth Hdr, halt parsing".to_string());
+                // IPv6 Auth Hdr, halt parsing
+                pktsum.next_proto = Some(next_proto);
+                return Ok((next_offset, ProtoHandler::COMPLETE));
             }
             IPV6_NONXT => {
-                return Err("IPv6 No Next Header, halt parsing".to_string());
+                // IPv6 No Next Header, halt parsing
+                pktsum.next_proto = Some(next_proto);
+                return Ok((next_offset, ProtoHandler::COMPLETE));
             }
             _ => bos = true,
         };
     }
 
     pktsum.next_proto = Some(next_proto);
-    Ok(next_offset)
+
+    let next_proto_hdl = get_nextproto_handler(&pktsum.next_proto);
+
+    Ok((next_offset, next_proto_hdl))
+}
+
+fn handle_ports(
+    pkt: &Packet,
+    offset: usize,
+    pktsum: &mut PacketSummary,
+) -> Result<(usize, ProtoHandler), String> {
+    let sport_offset = offset;
+    let dport_offset = offset + 2;
+    pktsum.l4_sport = get_field(pkt.data, sport_offset, 16).ok().map(|x| x as u16);
+    pktsum.l4_dport = get_field(pkt.data, dport_offset, 16).ok().map(|x| x as u16);
+
+    Ok((offset + 4, ProtoHandler::COMPLETE))
 }
 
 fn handle_unknown(
     _pkt: &Packet,
     _offset: usize,
     _pktsum: &mut PacketSummary,
-) -> Result<usize, String> {
+) -> Result<(usize, ProtoHandler), String> {
     Err("Unknown protocol".to_string())
-}
-
-#[derive(Eq, PartialEq, Default)]
-pub struct PacketSummary<'a> {
-    pub l2_src: Option<u128>,
-    pub l2_dst: Option<u128>,
-    pub ethertype: Option<Ethertype>,
-    pub vlan_id: Option<u16>,
-    pub l3_src: Option<u128>,
-    pub l3_dst: Option<u128>,
-    pub next_proto: Option<NextProto>,
-    pub l4_sport: Option<u16>,
-    pub l4_dport: Option<u16>,
-    pub resolver: Option<&'a mut HashMap<IpAddr, String>>,
 }
 
 impl<'a> PacketSummary<'a> {
@@ -166,28 +257,28 @@ impl<'a> PacketSummary<'a> {
         let mut pktsum = Self::new();
         pktsum.resolver = resolver;
 
-        let l3_offset = match handle_eth(pkt, 0, &mut pktsum) {
-            Ok(o) => o,
-            Err(_) => return pktsum, // cannot continue
-        };
-        let l3_callback = match pktsum.ethertype {
-            Some(IPV4) => handle_ipv4,
-            Some(IPV6) => handle_ipv6,
-            _ => handle_unknown,
-        };
-        let l4_offset = match l3_callback(pkt, l3_offset, &mut pktsum) {
-            Ok(o) => o,
-            Err(_) => return pktsum, // cannot continue
-        };
+        // start with Ethernet handler at offset 0
+        let mut offset = 0;
+        let mut proto_handler = ProtoHandler::ETH;
 
-        match pktsum.next_proto {
-            Some(TCP) | Some(UDP) | Some(DCCP) | Some(SCTP) => {
-                let sport_offset = l4_offset;
-                let dport_offset = l4_offset + 2;
-                pktsum.l4_sport = get_field(pkt.data, sport_offset, 16).ok().map(|x| x as u16);
-                pktsum.l4_dport = get_field(pkt.data, dport_offset, 16).ok().map(|x| x as u16);
-            }
-            _ => {}
+        // walk the protocol stacks until we hit something we cannot handle.
+        // the handlers will populate pktsum as we go.
+        loop {
+            break match proto_handler {
+                ProtoHandler::UNKNOWN => {}  // walking complete
+                ProtoHandler::COMPLETE => {} // walking complete
+                _ => {
+                    match handle_protocol(pkt, offset, &mut pktsum, &proto_handler) {
+                        Ok((o, h)) => {
+                            // move offset & handler onto returned values
+                            offset = o;
+                            proto_handler = h;
+                        }
+                        Err(_) => return pktsum, // cannot continue
+                    }
+                    continue; // don't break, continue walking
+                }
+            };
         }
         pktsum
     }
@@ -481,12 +572,21 @@ mod tests {
     #[test]
     fn test_handle_eth() {
         let mut pktsum = PacketSummary::new();
-        let expected = 18;
+        let expected = (14, ProtoHandler::VLAN);
 
         let result = handle_eth(&REF_V4_PACKET, 0, &mut pktsum);
         assert_eq!(result.unwrap(), expected, "offset");
         assert_eq!(pktsum.l2_dst.unwrap(), 1, "l2_dst");
         assert_eq!(pktsum.l2_src.unwrap(), 281474976710655, "l2_src");
+    }
+
+    #[test]
+    fn test_handle_vlan() {
+        let mut pktsum = PacketSummary::new();
+        let expected = (18, ProtoHandler::IPV4);
+
+        let result = handle_vlan(&REF_V4_PACKET, 14, &mut pktsum);
+        assert_eq!(result.unwrap(), expected, "offset");
         assert_eq!(pktsum.ethertype.unwrap(), 2048, "ethertype");
         assert_eq!(pktsum.vlan_id.unwrap(), 4095, "vlan_id");
     }
@@ -494,7 +594,7 @@ mod tests {
     #[test]
     fn test_handle_ipv4() {
         let mut pktsum = PacketSummary::new();
-        let expected = 38;
+        let expected = (38, ProtoHandler::TCP);
 
         let result = handle_ipv4(&REF_V4_PACKET, 18, &mut pktsum);
         assert_eq!(result.unwrap(), expected, "offset");
@@ -506,7 +606,7 @@ mod tests {
     #[test]
     fn test_handle_ipv6() {
         let mut pktsum = PacketSummary::new();
-        let expected = 114;
+        let expected = (114, ProtoHandler::TCP);
 
         let result = handle_ipv6(&REF_V6_PACKET, 18, &mut pktsum);
         assert_eq!(result.unwrap(), expected, "offset");

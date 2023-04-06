@@ -60,6 +60,7 @@ struct Cli {
     interface: Option<String>,
 }
 
+/// Applys the provided BPF filter to the capture file.
 fn apply_filter<T: Activated>(cap: &mut Capture<T>, bpf: &Option<String>, cmd: &mut clap::Command) {
     if let Some(bpf) = bpf {
         match cap.filter(bpf, true) {
@@ -69,6 +70,16 @@ fn apply_filter<T: Activated>(cap: &mut Capture<T>, bpf: &Option<String>, cmd: &
     }
 }
 
+/// Dump any valid ASCII strings over `len` size to stdout.
+///
+/// If `resolver` is passed in, this function will use it to perform DNS
+/// lookups on addresses.
+///
+/// If `block_print` is set, the function will only print the packet headers
+/// for the first ASCII line found.
+///
+/// If `regex` is provided this is run against the entire packet before
+/// the string scanning is run. Packets not matching the regex are skipped.
 fn dump_strings<T: Activated>(
     cap: &mut Capture<T>,
     len: &usize,
@@ -137,6 +148,7 @@ fn dump_strings<T: Activated>(
     }
 }
 
+/// Print to stdout the available network devices.
 fn list_devices() {
     let default_dev = Device::lookup().ok().flatten();
     let devices: Vec<String> = Device::list()
@@ -147,8 +159,8 @@ fn list_devices() {
     for dev in devices.iter() {
         if let Some(default_dev) = &default_dev {
             if *dev == *default_dev.name {
-                let bold_dev = dev.to_string().bold();
-                print!("{bold_dev}");
+                let dev = dev.to_string().bold();
+                print!("{dev}");
             } else {
                 print!("{dev}");
             }
