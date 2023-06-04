@@ -382,8 +382,9 @@ impl<'a> PacketSummary<'a> {
             }
             out.push_str(format!("({})", next_proto.green()).as_str());
         } else {
-            let mut l2_src = String::new();
-            let mut l2_dst = String::new();
+            // create with 17 byte capacity as this will be fixed len
+            let mut l2_src = String::with_capacity(17);
+            let mut l2_dst = String::with_capacity(17);
 
             int_to_mac_str(&(self.l2_src.unwrap_or(0) as u64), &mut l2_src);
             int_to_mac_str(&(self.l2_dst.unwrap_or(0) as u64), &mut l2_dst);
