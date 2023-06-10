@@ -21,6 +21,7 @@ cfg-if = "1"
 libc = "0"
 regex = "1.7.1"
 
+[dev-dependencies]
 [features]
 bland = ["colored/no-color"]
 resolve = ["dns-lookup"]
@@ -30,3 +31,5 @@ split-debuginfo = "packed"
 
 [profile.release]
 lto = true
+codegen-units = 1
+panic = "abort"
