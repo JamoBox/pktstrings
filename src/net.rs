@@ -43,7 +43,7 @@ pub enum ProtoHandler {
     SCTP,
 }
 
-fn handle_protocol(
+pub fn handle_protocol(
     pkt: &Packet,
     offset: usize,
     pktsum: &mut PacketSummary,
@@ -64,7 +64,7 @@ fn handle_protocol(
     handler(pkt, offset, pktsum)
 }
 
-fn get_field(data: &[u8], offset: usize, bitlen: usize) -> Result<u128, &str> {
+pub fn get_field(data: &[u8], offset: usize, bitlen: usize) -> Result<u128, &str> {
     assert!(bitlen % 8 == 0, "Length must be positive multiple of 8");
     assert!(bitlen <= 128, "Length must be less than 128 bits");
     if (data.len() - offset) < bitlen / 8 {
@@ -77,7 +77,7 @@ fn get_field(data: &[u8], offset: usize, bitlen: usize) -> Result<u128, &str> {
     Ok(addr)
 }
 
-fn int_to_mac_str(addr: &u64, formatted: &mut String) {
+pub fn int_to_mac_str(addr: &u64, formatted: &mut String) {
     let bytes = addr.to_be_bytes();
     write!(formatted, "{:02x}", bytes[2]).unwrap();
     for byte in bytes[3..].iter() {
@@ -85,7 +85,7 @@ fn int_to_mac_str(addr: &u64, formatted: &mut String) {
     }
 }
 
-fn int_to_ipv6_str(addr: &u128, formatted: &mut String) {
+pub fn int_to_ipv6_str(addr: &u128, formatted: &mut String) {
     let bytes = addr.to_be_bytes();
     write!(formatted, "{:02x}{:02x}", bytes[0], bytes[1]).unwrap();
     for pair in bytes
@@ -98,7 +98,7 @@ fn int_to_ipv6_str(addr: &u128, formatted: &mut String) {
     }
 }
 
-fn int_to_ipv4_str(addr: &u32, formatted: &mut String) {
+pub fn int_to_ipv4_str(addr: &u32, formatted: &mut String) {
     let bytes = addr.to_be_bytes();
     write!(formatted, "{}", bytes[0]).unwrap();
     for byte in bytes.iter().skip(1) {
@@ -106,7 +106,7 @@ fn int_to_ipv4_str(addr: &u32, formatted: &mut String) {
     }
 }
 
-fn get_ethertype_handler(ethertype: &Option<Ethertype>) -> ProtoHandler {
+pub fn get_ethertype_handler(ethertype: &Option<Ethertype>) -> ProtoHandler {
     match ethertype {
         Some(VLAN) => ProtoHandler::VLAN,
         Some(IPV4) => ProtoHandler::IPV4,
@@ -115,7 +115,7 @@ fn get_ethertype_handler(ethertype: &Option<Ethertype>) -> ProtoHandler {
     }
 }
 
-fn get_nextproto_handler(next_proto: &Option<NextProto>) -> ProtoHandler {
+pub fn get_nextproto_handler(next_proto: &Option<NextProto>) -> ProtoHandler {
     match next_proto {
         Some(TCP) => ProtoHandler::TCP,
         Some(UDP) => ProtoHandler::UDP,
@@ -125,7 +125,7 @@ fn get_nextproto_handler(next_proto: &Option<NextProto>) -> ProtoHandler {
     }
 }
 
-fn handle_eth(
+pub fn handle_eth(
     pkt: &Packet,
     offset: usize,
     pktsum: &mut PacketSummary,
@@ -139,7 +139,7 @@ fn handle_eth(
     Ok((offset + 14, next_proto_hdl))
 }
 
-fn handle_vlan(
+pub fn handle_vlan(
     pkt: &Packet,
     offset: usize,
     pktsum: &mut PacketSummary,
@@ -154,7 +154,7 @@ fn handle_vlan(
     Ok((offset + 4, next_proto_hdl))
 }
 
-fn handle_ipv4(
+pub fn handle_ipv4(
     pkt: &Packet,
     offset: usize,
     pktsum: &mut PacketSummary,
@@ -170,7 +170,7 @@ fn handle_ipv4(
     Ok((offset + ihl, next_proto_hdl))
 }
 
-fn handle_ipv6(
+pub fn handle_ipv6(
     pkt: &Packet,
     offset: usize,
     pktsum: &mut PacketSummary,
@@ -227,7 +227,7 @@ fn handle_ipv6(
     Ok((next_offset, next_proto_hdl))
 }
 
-fn handle_ports(
+pub fn handle_ports(
     pkt: &Packet,
     offset: usize,
     pktsum: &mut PacketSummary,
@@ -240,7 +240,7 @@ fn handle_ports(
     Ok((offset + 4, ProtoHandler::COMPLETE))
 }
 
-fn handle_unknown(
+pub fn handle_unknown(
     _pkt: &Packet,
     _offset: usize,
     _pktsum: &mut PacketSummary,
