@@ -33,3 +33,11 @@ split-debuginfo = "packed"
 lto = true
 codegen-units = 1
 panic = "abort"
+
+[lib]
+name = "pktstrings"
+path = "src/lib/lib.rs"
+
+[[bin]]
+name = "pktstrings"
+path = "src/bin/pktstrings.rs"

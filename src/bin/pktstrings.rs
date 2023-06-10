@@ -7,8 +7,7 @@ use regex::bytes::Regex;
 use std::path::Path;
 use std::vec::Vec;
 
-mod net;
-mod proto;
+use pktstrings::net;
 
 const HELP_NUMBER: &str = "Number of printable characters to display";
 const HELP_BLOCK_PRINT: &str = "Print string blocks without packet info on each line";
