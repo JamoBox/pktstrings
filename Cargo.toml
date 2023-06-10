@@ -22,6 +22,8 @@ libc = "0"
 regex = "1.7.1"
 
 [dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
 [features]
 bland = ["colored/no-color"]
 resolve = ["dns-lookup"]
@@ -41,3 +43,7 @@ path = "src/lib/lib.rs"
 [[bin]]
 name = "pktstrings"
 path = "src/bin/pktstrings.rs"
+
+[[bench]]
+name = "net_benchmark"
+harness = false
