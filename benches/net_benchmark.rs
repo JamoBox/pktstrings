@@ -52,13 +52,16 @@ const DATA: &[u8] = &[
 ];
 
 fn from_elem(c: &mut Criterion) {
-    
     let mut group = c.benchmark_group("Int field from byte slice");
     for bytelen in 0..16 {
         group.throughput(Throughput::Bytes(bytelen as u64));
-        group.bench_with_input(BenchmarkId::new("get_field", bytelen), &bytelen, |b, bytelen| {
-            b.iter(|| get_field(DATA, 0, *bytelen));
-        });
+        group.bench_with_input(
+            BenchmarkId::new("get_field", bytelen),
+            &bytelen,
+            |b, bytelen| {
+                b.iter(|| get_field(DATA, 0, *bytelen));
+            },
+        );
     }
     group.finish();
 }
