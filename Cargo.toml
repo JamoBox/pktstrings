@@ -45,5 +45,5 @@ name = "pktstrings"
 path = "src/bin/pktstrings.rs"
 
 [[bench]]
-name = "net_benchmark"
+name = "net"
 harness = false
