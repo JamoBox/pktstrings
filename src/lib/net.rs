@@ -43,7 +43,7 @@ pub enum ProtoHandler {
     SCTP,
 }
 
-fn handle_protocol(
+pub fn handle_protocol(
     pkt: &Packet,
     offset: usize,
     pktsum: &mut PacketSummary,
@@ -64,20 +64,19 @@ fn handle_protocol(
     handler(pkt, offset, pktsum)
 }
 
-fn get_field(data: &[u8], offset: usize, bitlen: usize) -> Result<u128, &str> {
-    assert!(bitlen % 8 == 0, "Length must be positive multiple of 8");
-    assert!(bitlen <= 128, "Length must be less than 128 bits");
-    if (data.len() - offset) < bitlen / 8 {
-        return Err("Data after offset is shorter than bitlen");
+pub fn get_field(data: &[u8], offset: usize, bytelen: usize) -> Result<u128, &str> {
+    assert!(bytelen <= 16, "Length must be less than 16 bytes");
+    if (data.len() - offset) < bytelen {
+        return Err("Data after offset is shorter than bytelen");
     }
     let mut addr: u128 = 0;
-    for i in 0..(bitlen / 8) {
-        addr |= (data[offset + i] as u128) << ((bitlen - 8) - (8 * i))
+    for i in 0..(bytelen) {
+        addr |= (data[offset + i] as u128) << (((bytelen - 1) * 8) - (i * 8))
     }
     Ok(addr)
 }
 
-fn int_to_mac_str(addr: &u64, formatted: &mut String) {
+pub fn int_to_mac_str(addr: &u64, formatted: &mut String) {
     let bytes = addr.to_be_bytes();
     write!(formatted, "{:02x}", bytes[2]).unwrap();
     for byte in bytes[3..].iter() {
@@ -85,7 +84,7 @@ fn int_to_mac_str(addr: &u64, formatted: &mut String) {
     }
 }
 
-fn int_to_ipv6_str(addr: &u128, formatted: &mut String) {
+pub fn int_to_ipv6_str(addr: &u128, formatted: &mut String) {
     let bytes = addr.to_be_bytes();
     write!(formatted, "{:02x}{:02x}", bytes[0], bytes[1]).unwrap();
     for pair in bytes
@@ -98,7 +97,7 @@ fn int_to_ipv6_str(addr: &u128, formatted: &mut String) {
     }
 }
 
-fn int_to_ipv4_str(addr: &u32, formatted: &mut String) {
+pub fn int_to_ipv4_str(addr: &u32, formatted: &mut String) {
     let bytes = addr.to_be_bytes();
     write!(formatted, "{}", bytes[0]).unwrap();
     for byte in bytes.iter().skip(1) {
@@ -106,7 +105,7 @@ fn int_to_ipv4_str(addr: &u32, formatted: &mut String) {
     }
 }
 
-fn get_ethertype_handler(ethertype: &Option<Ethertype>) -> ProtoHandler {
+pub fn get_ethertype_handler(ethertype: &Option<Ethertype>) -> ProtoHandler {
     match ethertype {
         Some(VLAN) => ProtoHandler::VLAN,
         Some(IPV4) => ProtoHandler::IPV4,
@@ -115,7 +114,7 @@ fn get_ethertype_handler(ethertype: &Option<Ethertype>) -> ProtoHandler {
     }
 }
 
-fn get_nextproto_handler(next_proto: &Option<NextProto>) -> ProtoHandler {
+pub fn get_nextproto_handler(next_proto: &Option<NextProto>) -> ProtoHandler {
     match next_proto {
         Some(TCP) => ProtoHandler::TCP,
         Some(UDP) => ProtoHandler::UDP,
@@ -125,36 +124,36 @@ fn get_nextproto_handler(next_proto: &Option<NextProto>) -> ProtoHandler {
     }
 }
 
-fn handle_eth(
+pub fn handle_eth(
     pkt: &Packet,
     offset: usize,
     pktsum: &mut PacketSummary,
 ) -> Result<(usize, ProtoHandler), String> {
-    pktsum.l2_dst = get_field(pkt, offset, 48).ok();
-    pktsum.l2_src = get_field(pkt, offset + 6, 48).ok();
-    pktsum.ethertype = get_field(pkt.data, offset + 12, 16).map(|x| x as u16).ok();
+    pktsum.l2_dst = get_field(pkt, offset, 6).ok();
+    pktsum.l2_src = get_field(pkt, offset + 6, 6).ok();
+    pktsum.ethertype = get_field(pkt.data, offset + 12, 2).map(|x| x as u16).ok();
 
     let next_proto_hdl = get_ethertype_handler(&pktsum.ethertype);
 
     Ok((offset + 14, next_proto_hdl))
 }
 
-fn handle_vlan(
+pub fn handle_vlan(
     pkt: &Packet,
     offset: usize,
     pktsum: &mut PacketSummary,
 ) -> Result<(usize, ProtoHandler), String> {
-    pktsum.vlan_id = get_field(pkt.data, offset, 16)
+    pktsum.vlan_id = get_field(pkt.data, offset, 2)
         .map(|x| x as u16 & 0xfff)
         .ok();
-    pktsum.ethertype = get_field(pkt.data, offset + 2, 16).map(|x| x as u16).ok();
+    pktsum.ethertype = get_field(pkt.data, offset + 2, 2).map(|x| x as u16).ok();
 
     let next_proto_hdl = get_ethertype_handler(&pktsum.ethertype);
 
     Ok((offset + 4, next_proto_hdl))
 }
 
-fn handle_ipv4(
+pub fn handle_ipv4(
     pkt: &Packet,
     offset: usize,
     pktsum: &mut PacketSummary,
@@ -162,15 +161,15 @@ fn handle_ipv4(
     let ihl = ((pkt.data[offset] & 0xf) * 4) as usize;
 
     pktsum.next_proto = Some(pkt.data[offset + 9]);
-    pktsum.l3_src = get_field(pkt, offset + 12, 32).ok();
-    pktsum.l3_dst = get_field(pkt, offset + 16, 32).ok();
+    pktsum.l3_src = get_field(pkt, offset + 12, 4).ok();
+    pktsum.l3_dst = get_field(pkt, offset + 16, 4).ok();
 
     let next_proto_hdl = get_nextproto_handler(&pktsum.next_proto);
 
     Ok((offset + ihl, next_proto_hdl))
 }
 
-fn handle_ipv6(
+pub fn handle_ipv6(
     pkt: &Packet,
     offset: usize,
     pktsum: &mut PacketSummary,
@@ -178,8 +177,8 @@ fn handle_ipv6(
     let mut next_offset = offset + 40;
     let mut next_proto = pkt.data[offset + 6];
 
-    pktsum.l3_src = get_field(pkt, offset + 8, 128).ok();
-    pktsum.l3_dst = get_field(pkt, offset + 24, 128).ok();
+    pktsum.l3_src = get_field(pkt, offset + 8, 16).ok();
+    pktsum.l3_dst = get_field(pkt, offset + 24, 16).ok();
 
     // walk until we hit bottom of IPv6 header stack
     let mut bos = false;
@@ -190,7 +189,7 @@ fn handle_ipv6(
                 next_offset += 8 + (pkt[next_offset + 1] * 8) as usize;
             }
             IPV6_FRAG => {
-                let frag = get_field(pkt, next_offset + 2, 16)
+                let frag = get_field(pkt, next_offset + 2, 2)
                     .map(|x| x as u16 & 0xff8)
                     .unwrap();
                 next_proto = pkt[next_offset];
@@ -227,20 +226,20 @@ fn handle_ipv6(
     Ok((next_offset, next_proto_hdl))
 }
 
-fn handle_ports(
+pub fn handle_ports(
     pkt: &Packet,
     offset: usize,
     pktsum: &mut PacketSummary,
 ) -> Result<(usize, ProtoHandler), String> {
     let sport_offset = offset;
     let dport_offset = offset + 2;
-    pktsum.l4_sport = get_field(pkt.data, sport_offset, 16).ok().map(|x| x as u16);
-    pktsum.l4_dport = get_field(pkt.data, dport_offset, 16).ok().map(|x| x as u16);
+    pktsum.l4_sport = get_field(pkt.data, sport_offset, 2).ok().map(|x| x as u16);
+    pktsum.l4_dport = get_field(pkt.data, dport_offset, 2).ok().map(|x| x as u16);
 
     Ok((offset + 4, ProtoHandler::COMPLETE))
 }
 
-fn handle_unknown(
+pub fn handle_unknown(
     _pkt: &Packet,
     _offset: usize,
     _pktsum: &mut PacketSummary,
@@ -382,8 +381,9 @@ impl<'a> PacketSummary<'a> {
             }
             out.push_str(format!("({})", next_proto.green()).as_str());
         } else {
-            let mut l2_src = String::new();
-            let mut l2_dst = String::new();
+            // create with 17 byte capacity as this will be fixed len
+            let mut l2_src = String::with_capacity(17);
+            let mut l2_dst = String::with_capacity(17);
 
             int_to_mac_str(&(self.l2_src.unwrap_or(0) as u64), &mut l2_src);
             int_to_mac_str(&(self.l2_dst.unwrap_or(0) as u64), &mut l2_dst);
@@ -503,7 +503,7 @@ mod tests {
         let data = &[0x01, 0x23, 0x34, 0x0f, 0xff, 0x56];
         let expected = 4095;
 
-        let result = get_field(data, 3, 16);
+        let result = get_field(data, 3, 2);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), expected);
     }
