@@ -47,3 +47,7 @@ path = "src/bin/pktstrings.rs"
 [[bench]]
 name = "net"
 harness = false
+
+[[bench]]
+name = "strings"
+harness = false

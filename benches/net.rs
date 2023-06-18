@@ -19,39 +19,27 @@ fn net(c: &mut Criterion) {
     field_group.finish();
 
     let mut parsing_group = c.benchmark_group("Packet Parsing");
-    parsing_group.bench_function(
-        BenchmarkId::new("from_packet", "IPv4"),
-        |b| {
-            b.iter(|| net::PacketSummary::from_packet(&meta::REF_V4_PACKET, None));
-        }
-    );
-    parsing_group.bench_function(
-        BenchmarkId::new("from_packet", "IPv6"),
-        |b| {
-            b.iter(|| net::PacketSummary::from_packet(&meta::REF_V6_PACKET, None));
-        }
-    );
+    parsing_group.bench_function(BenchmarkId::new("from_packet", "IPv4"), |b| {
+        b.iter(|| net::PacketSummary::from_packet(&meta::REF_V4_PACKET, None));
+    });
+    parsing_group.bench_function(BenchmarkId::new("from_packet", "IPv6"), |b| {
+        b.iter(|| net::PacketSummary::from_packet(&meta::REF_V6_PACKET, None));
+    });
     parsing_group.finish();
 
     let mut summary_group = c.benchmark_group("Packet Summary");
-    summary_group.bench_function(
-        BenchmarkId::new("from_packet_and_formatted", "IPv4"),
-        |b| {
-            b.iter(|| {
-                let mut pktsum = net::PacketSummary::from_packet(&meta::REF_V4_PACKET, None);
-                pktsum.formatted();
-            });
-        }
-    );
-    summary_group.bench_function(
-        BenchmarkId::new("from_packet_and_formatted", "IPv6"),
-        |b| {
-            b.iter(|| {
-                let mut pktsum = net::PacketSummary::from_packet(&meta::REF_V6_PACKET, None);
-                pktsum.formatted();
-            });
-        }
-    );
+    summary_group.bench_function(BenchmarkId::new("from_packet_and_formatted", "IPv4"), |b| {
+        b.iter(|| {
+            let mut pktsum = net::PacketSummary::from_packet(&meta::REF_V4_PACKET, None);
+            pktsum.formatted();
+        });
+    });
+    summary_group.bench_function(BenchmarkId::new("from_packet_and_formatted", "IPv6"), |b| {
+        b.iter(|| {
+            let mut pktsum = net::PacketSummary::from_packet(&meta::REF_V6_PACKET, None);
+            pktsum.formatted();
+        });
+    });
     summary_group.finish();
 }
 
