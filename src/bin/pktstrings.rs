@@ -76,12 +76,12 @@ fn list_devices() {
     let devices: Vec<String> = Device::list()
         .unwrap_or_default()
         .iter()
-        .map(|x| x.name.clone())
+        .map(|x| x.name.to_string())
         .collect();
     for dev in devices.iter() {
         if let Some(default_dev) = &default_dev {
             if *dev == *default_dev.name {
-                let dev = dev.to_string().bold();
+                let dev = dev.bold();
                 print!("{dev}");
             } else {
                 print!("{dev}");
