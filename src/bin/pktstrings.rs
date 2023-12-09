@@ -72,25 +72,18 @@ fn apply_filter<T: Activated>(cap: &mut Capture<T>, bpf: &Option<String>, cmd: &
 
 /// Print to stdout the available network devices.
 fn list_devices() {
-    let default_dev = Device::lookup().ok().flatten();
-    let devices: Vec<String> = Device::list()
+    Device::list()
         .unwrap_or_default()
         .iter()
-        .map(|x| x.name.clone())
-        .collect();
-    for dev in devices.iter() {
-        if let Some(default_dev) = &default_dev {
-            if *dev == *default_dev.name {
-                let dev = dev.to_string().bold();
-                print!("{dev}");
-            } else {
-                print!("{dev}");
+        .for_each(|dev| {
+            let mut dev = dev.name.to_string().normal();
+            if let Some(default_dev) = Device::lookup().ok().flatten() {
+                if *dev == *default_dev.name {
+                    dev = dev.bold();
+                }
             }
-        } else {
-            print!("{dev}");
-        }
-        print!("\t");
-    }
+            print!("{dev}\t");
+        });
     println!();
 }
 
@@ -124,9 +117,8 @@ fn main() -> Result<(), clap::Error> {
         }
     }
 
-    if cli.file.is_some() {
-        let file = &cli.file.unwrap();
-        let filepath = Path::new(file);
+    if let Some(file) = cli.file {
+        let filepath = Path::new(&file);
 
         if !filepath.exists() {
             let err = format!("file not found: {file}");
@@ -146,8 +138,7 @@ fn main() -> Result<(), clap::Error> {
             }
             Err(err) => cmd.error(ErrorKind::InvalidValue, err).exit(),
         };
-    } else if cli.interface.is_some() {
-        let intf = cli.interface.unwrap();
+    } else if let Some(intf) = cli.interface {
         let mut devices: Vec<Device> = vec![];
 
         devices.append(&mut Device::list().unwrap_or_default());
