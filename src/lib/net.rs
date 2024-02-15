@@ -283,10 +283,16 @@ impl<'a> PacketSummary<'a> {
     }
 
     pub fn formatted(&mut self) -> String {
-        let mut out = String::from("[");
+        // use a bit more memory per packet to avoid reallocating.
+        // memory is only required for the lifetime of the packet
+        // so this seems a fair optimisation.
+        let mut out = String::with_capacity(128);
 
-        let mut l3_src = String::new();
-        let mut l3_dst = String::new();
+        out.push('[');
+
+        // pre-allocate ipv6 max strlen
+        let mut l3_src = String::with_capacity(39);
+        let mut l3_dst = String::with_capacity(39);
 
         if let Some(vlan_id) = self.vlan_id {
             let tag = vlan_id.to_string();
@@ -303,10 +309,10 @@ impl<'a> PacketSummary<'a> {
             None => String::new(),
         };
 
-        let mut next_proto = "-".to_string();
-        if let Some(np) = self.next_proto {
-            next_proto = np.resolve();
-        }
+        let next_proto = match self.next_proto {
+            Some(np) => np.resolve(),
+            None => "-".to_string(),
+        };
 
         let is_ip = match self.ethertype {
             Some(IPV6) => {
