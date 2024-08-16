@@ -13,10 +13,10 @@ keywords = ["packet-analyzer", "pcap", "sniffing", "packet"]
 categories = ["command-line-utilities", "network-programming"]
 
 [dependencies]
-clap = {version = "4", features = ["derive"]}
+clap = { version = "4", features = ["derive"] }
 pcap = "1"
 colored = "2"
-dns-lookup = {version = "2", optional = true}
+dns-lookup = { version = "2", optional = true }
 cfg-if = "1"
 libc = "0"
 regex = "1"
@@ -50,4 +50,8 @@ harness = false
 
 [[bench]]
 name = "strings"
+harness = false
+
+[[bench]]
+name = "getfield_func_vs_macro"
 harness = false
