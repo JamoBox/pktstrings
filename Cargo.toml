@@ -14,7 +14,7 @@ categories = ["command-line-utilities", "network-programming"]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
-pcap = "1"
+pcap = "2"
 colored = "2"
 dns-lookup = { version = "2", optional = true }
 cfg-if = "1"
@@ -54,4 +54,8 @@ harness = false
 
 [[bench]]
 name = "getfield_func_vs_macro"
+harness = false
+
+[[bench]]
+name = "buffer_strings_vs_print_strings"
 harness = false
