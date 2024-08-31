@@ -60,7 +60,7 @@ struct Cli {
     interface: Option<String>,
 }
 
-/// Applys the provided BPF filter to the capture file.
+/// Applies the provided BPF filter to the capture file.
 fn apply_filter<T: Activated>(cap: &mut Capture<T>, bpf: &Option<String>, cmd: &mut clap::Command) {
     if let Some(bpf) = bpf {
         match cap.filter(bpf, true) {
@@ -72,18 +72,15 @@ fn apply_filter<T: Activated>(cap: &mut Capture<T>, bpf: &Option<String>, cmd: &
 
 /// Print to stdout the available network devices.
 fn list_devices() {
-    Device::list()
-        .unwrap_or_default()
-        .iter()
-        .for_each(|dev| {
-            let mut dev = dev.name.to_string().normal();
-            if let Some(default_dev) = Device::lookup().ok().flatten() {
-                if *dev == *default_dev.name {
-                    dev = dev.bold();
-                }
+    Device::list().unwrap_or_default().iter().for_each(|dev| {
+        let mut dev = dev.name.to_string().normal();
+        if let Some(default_dev) = Device::lookup().ok().flatten() {
+            if *dev == *default_dev.name {
+                dev = dev.bold();
             }
-            print!("{dev}\t");
-        });
+        }
+        print!("{dev}\t");
+    });
     println!();
 }
 
