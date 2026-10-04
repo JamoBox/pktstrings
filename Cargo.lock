@@ -364,12 +364,12 @@ checksum = "9c198f91728a82281a64e1f4f9eeb25d82cb32a5de251c6bd1b5154d63a8e7bd"
 
 [[package]]
 name = "libloading"
-version = "0.6.7"
+version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "351a32417a12d5f7e82c368a66781e307834dae04c6ce0cd4456d52989229883"
+checksum = "4979f22fdb869068da03c9f7528f8297c6fd2606bc3a4affe42e6a823fdb8da4"
 dependencies = [
  "cfg-if",
- "winapi",
+ "windows-targets 0.52.0",
 ]
 
 [[package]]
@@ -407,9 +407,9 @@ checksum = "0ab1bc2a289d34bd04a330323ac98a1b4bc82c9d9fcb1e66b63caa84da26b575"
 
 [[package]]
 name = "pcap"
-version = "1.2.0"
+version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77452fdf9d211d9ca35d092aeefe4d4b3f0c4eb529ffb87a8a3b8fe2bb7c37c3"
+checksum = "fe4d339439e5e7f8ce32d58c2b58d5e304790e66f3aa0bd391dd6a9dc676e054"
 dependencies = [
  "bitflags",
  "errno",
@@ -428,7 +428,7 @@ checksum = "d231b230927b5e4ad203db57bbcbee2802f6bce620b1e4a9024a07d94e2907ec"
 
 [[package]]
 name = "pktstrings"
-version = "1.4.1"
+version = "1.5.0"
 dependencies = [
  "cfg-if",
  "clap",

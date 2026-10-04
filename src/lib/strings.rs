@@ -32,8 +32,9 @@ pub fn dump_strings<T: Activated>(
             }
         }
 
-        let mut printed = false;
+        let mut found = false;
         let mut chars = 0;
+        let mut display_string = String::new();
         let mut partial = String::new();
         let mut pkt_str: Option<String> = None;
         for byte in pkt.data {
@@ -42,7 +43,7 @@ pub fn dump_strings<T: Activated>(
             if c.is_ascii() && !c.is_ascii_control() {
                 chars += 1;
                 if chars > *len {
-                    print!("{}", c);
+                    display_string.push(c);
                 } else {
                     partial.push(c);
                     if chars == *len {
@@ -57,28 +58,33 @@ pub fn dump_strings<T: Activated>(
                         }
 
                         let idx = pkt_count.to_string().blue();
-                        if !printed || !*block_print {
+                        if !found || !*block_print {
                             if let Some(ref mut pkt_str) = pkt_str {
-                                print!("[{idx}]{pkt_str}: ");
-                                printed = true;
+                                display_string.push_str(format!("[{idx}]{pkt_str}: ").as_str());
+                                found = true;
                                 if *block_print {
-                                    println!();
+                                    display_string.push('\n');
                                 }
                             }
                         }
-                        print!("{partial}");
+                        display_string.push_str(partial.as_str());
+                        partial.clear();
                     }
                 }
             } else {
+                // print when we encounter non-ascii
                 if chars >= *len {
-                    println!();
+                    println!("{}", display_string);
+                } else {
+                    partial.clear();
+                    display_string.clear()
                 }
                 chars = 0;
-                partial.clear();
             }
         }
+        // print if we hit end of packet but havent dumped buffer yet
         if chars >= *len {
-            println!();
+            println!("{}", display_string);
         }
     }
 }

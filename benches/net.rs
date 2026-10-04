@@ -12,7 +12,7 @@ fn net(c: &mut Criterion) {
             BenchmarkId::new("get_field", bytelen),
             &bytelen,
             |b, bytelen| {
-                b.iter(|| net::get_field(meta::DATA, 0, *bytelen));
+                b.iter(|| net::get_field!(meta::DATA, 0, *bytelen, u128));
             },
         );
     }
